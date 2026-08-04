@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Install Swift
-        uses: swift-actions/setup-swift@v2
+        uses: swift-actions/setup-swift@v2.4.0
         with:
           swift-version: "5.10"
       - run: swift test
