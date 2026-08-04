@@ -1,0 +1,38 @@
+name: coverage
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: coverage-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  coverage:
+    name: coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Swift
+        uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: "5.10"
+      - name: Test with coverage
+        run: |
+          set -euo pipefail
+          swift test --enable-code-coverage
+          BIN=$(swift build --show-bin-path)
+          xcrun --find llvm-cov >/dev/null 2>&1 || true
+          if command -v llvm-cov >/dev/null 2>&1; then
+            llvm-cov report \
+              "${BIN}/PrismKitPackageTests.xctest" \
+              -instr-profile="${BIN}/codecov/default.profdata" \
+              -ignore-filename-regex='.build|Tests' || true
+          fi
+          echo "coverage job completed (swift test --enable-code-coverage)"
