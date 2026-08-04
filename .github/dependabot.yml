@@ -10,6 +10,11 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: ci
+    # setup-swift@v3 is beta; GPG verify fails on GHA ubuntu
+    # (swift-actions/setup-swift#798). Pin v2 until v3 is production-ready.
+    ignore:
+      - dependency-name: "swift-actions/setup-swift"
+        update-types: ["version-update:semver-major"]
     groups:
       actions:
         patterns: ["*"]
