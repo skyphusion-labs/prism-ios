@@ -8,7 +8,7 @@
 public enum PrismKit {
   public static let name = "PrismKit"
   /// Library semver (keep in step with git tags / future releases).
-  public static let version = "0.4.0"
+  public static let version = "0.4.1"
 
   public static func health() -> String {
     "ok:\(name)"
