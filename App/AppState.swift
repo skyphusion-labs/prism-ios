@@ -468,9 +468,36 @@ final class AppState: ObservableObject {
         messages.append(ControlPlaneChatMessage(role: "system", content: turn.text))
       }
     }
-    let text = try await controlPlane.chat(model: model.model, messages: messages)
-    updateAssistant(id: assistantId, text: text)
-    // Refresh balance after a spend (best-effort).
+
+    if useStream, model.streaming == true {
+      var assembled = ""
+      let body = ControlPlaneChatRequest(model: model.model, messages: messages, stream: true)
+      for try await event in controlPlane.chatCompletionsStream(body) {
+        switch event {
+        case .delta(let t):
+          assembled += t
+          updateAssistant(id: assistantId, text: assembled)
+        case .done(let final):
+          if assembled.isEmpty, let out = final.output, !out.isEmpty {
+            updateAssistant(id: assistantId, text: out)
+          }
+        case .error(let m):
+          throw PrismError.serverError(m)
+        case .unknown:
+          break
+        }
+      }
+      if assembled.isEmpty,
+         let i = turns.firstIndex(where: { $0.id == assistantId }),
+         turns[i].text.isEmpty {
+        throw PrismError.serverError("Empty stream completion")
+      }
+    } else {
+      let text = try await controlPlane.chat(model: model.model, messages: messages)
+      updateAssistant(id: assistantId, text: text)
+    }
+
+    // Refresh balance after a spend (best-effort; stream omits money headers).
     if let me = try? await controlPlane.me() {
       planeBalance = me.usage?.balanceDescription
       banner = statusBannerPlane(modelCount: models.count, me: me)

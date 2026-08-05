@@ -9,7 +9,40 @@ import FoundationNetworking
 final class PrismKitTests: XCTestCase {
   func testHealthString() {
     XCTAssertEqual(PrismKit.health(), "ok:PrismKit")
-    XCTAssertEqual(PrismKit.version, "0.2.0")
+    XCTAssertEqual(PrismKit.version, "0.3.0")
+  }
+
+  func testOpenAISSEParserDeltas() {
+    let raw = """
+    data: {"choices":[{"delta":{"role":"assistant"}}]}
+
+    data: {"choices":[{"delta":{"content":"Hel"}}]}
+
+    data: {"choices":[{"delta":{"content":"lo"}}]}
+
+    data: {"choices":[{"delta":{},"finish_reason":"stop"}]}
+
+    data: [DONE]
+
+    """
+    let events = SSEParser.parseChatEvents(from: raw)
+    let deltas = events.compactMap { e -> String? in
+      if case .delta(let t) = e { return t }
+      return nil
+    }
+    // role-only chunk has no content; content deltas + empty finish
+    XCTAssertTrue(deltas.contains("Hel"))
+    XCTAssertTrue(deltas.contains("lo"))
+    XCTAssertEqual(deltas.filter { $0 == "Hel" || $0 == "lo" }.joined(), "Hello")
+    XCTAssertTrue(events.contains { if case .done = $0 { return true }; return false })
+  }
+
+  func testOpenAISSEParserError() {
+    let raw = #"data: {"error":{"message":"quota","code":"quota_exhausted"}}"# + "\n\n"
+    let events = SSEParser.parseChatEvents(from: raw)
+    XCTAssertEqual(events.count, 1)
+    guard case .error(let m) = events[0] else { return XCTFail("error") }
+    XCTAssertEqual(m, "quota")
   }
 
   func testMemorySecretStoreRoundTrip() throws {
@@ -328,5 +361,45 @@ final class ControlPlaneClientTests: XCTestCase {
     } catch {
       XCTFail("wrong error \(error)")
     }
+  }
+
+  func testOpenAIStreamBodyParsedViaSendRaw() async throws {
+    MockURLProtocol.handler = { req in
+      XCTAssertEqual(req.url?.path, "/v1/chat/completions")
+      XCTAssertEqual(req.value(forHTTPHeaderField: "Authorization"), "Bearer pcp_k")
+      if let body = req.httpBody,
+         let obj = try? JSONSerialization.jsonObject(with: body) as? [String: Any] {
+        XCTAssertEqual(obj["stream"] as? Bool, true)
+      }
+      let sse = """
+      data: {"choices":[{"delta":{"content":"hi"}}]}
+
+      data: {"choices":[{"delta":{},"finish_reason":"stop"}]}
+
+      data: [DONE]
+
+      """
+      return (200, sse.data(using: .utf8)!, ["Content-Type": "text/event-stream"])
+    }
+    let client = makeClient(key: "pcp_k")
+    let body = ControlPlaneChatRequest(
+      model: "m",
+      messages: [ControlPlaneChatMessage(role: "user", content: "x")],
+      stream: true
+    )
+    let dataBody = try JSONEncoder().encode(body)
+    let (data, _) = try await client.http.sendRaw(
+      method: "POST",
+      path: "/v1/chat/completions",
+      body: dataBody,
+      headers: ["Accept": "text/event-stream"],
+      bearer: "pcp_k"
+    )
+    let text = String(data: data, encoding: .utf8) ?? ""
+    let joined = SSEParser.parseChatEvents(from: text).compactMap { e -> String? in
+      if case .delta(let t) = e { return t }
+      return nil
+    }.joined()
+    XCTAssertEqual(joined, "hi")
   }
 }

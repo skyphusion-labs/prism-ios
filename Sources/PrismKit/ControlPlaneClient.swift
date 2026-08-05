@@ -87,16 +87,50 @@ public final class ControlPlaneClient: @unchecked Sendable {
 
   public func chatCompletions(_ body: ControlPlaneChatRequest) async throws -> ControlPlaneChatResponse {
     let key = try requireKey()
+    var payload = body
+    payload.stream = false
     let res: ControlPlaneChatResponse = try await http.sendJSON(
       method: "POST",
       path: "/v1/chat/completions",
-      body: body,
+      body: payload,
       bearer: key
     )
     if let err = res.error {
       throw PrismError.serverError(err.message ?? err.code ?? "control plane error")
     }
     return res
+  }
+
+  /// Streaming chat (`stream: true`). Yields OpenAI-compatible SSE frames as
+  /// ``ChatStreamEvent`` (delta / done / error). Same event shape as playground.
+  public func chatCompletionsStream(
+    _ body: ControlPlaneChatRequest
+  ) -> AsyncThrowingStream<ChatStreamEvent, Error> {
+    AsyncThrowingStream { continuation in
+      let task = Task {
+        do {
+          let key = try requireKey()
+          var payload = body
+          payload.stream = true
+          let dataBody = try JSONEncoder().encode(payload)
+          let req = try http.request(
+            method: "POST",
+            path: "/v1/chat/completions",
+            body: dataBody,
+            headers: ["Accept": "text/event-stream"],
+            bearer: key
+          )
+          for try await event in SSEStream.chatEvents(session: http.session, request: req) {
+            if Task.isCancelled { break }
+            continuation.yield(event)
+          }
+          continuation.finish()
+        } catch {
+          continuation.finish(throwing: error)
+        }
+      }
+      continuation.onTermination = { _ in task.cancel() }
+    }
   }
 
   /// Multi-turn chat (non-streaming). Prefer building `messages` from the UI transcript.
@@ -106,6 +140,26 @@ public final class ControlPlaneClient: @unchecked Sendable {
       throw PrismError.serverError("Empty completion")
     }
     return text
+  }
+
+  /// Collect stream deltas into one string.
+  public func chatStreamText(model: String, messages: [ControlPlaneChatMessage]) async throws -> String {
+    var parts: [String] = []
+    var finalOut: String?
+    let body = ControlPlaneChatRequest(model: model, messages: messages, stream: true)
+    for try await e in chatCompletionsStream(body) {
+      switch e {
+      case .delta(let t): parts.append(t)
+      case .done(let r):
+        if let out = r.output, !out.isEmpty { finalOut = out }
+      case .error(let m): throw PrismError.serverError(m)
+      case .unknown: break
+      }
+    }
+    let joined = parts.joined()
+    if !joined.isEmpty { return joined }
+    if let finalOut, !finalOut.isEmpty { return finalOut }
+    throw PrismError.serverError("Empty stream completion")
   }
 
   /// Simple single-turn helper.
