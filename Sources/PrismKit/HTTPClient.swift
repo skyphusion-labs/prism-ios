@@ -48,7 +48,8 @@ public final class HTTPClient: @unchecked Sendable {
     path: String,
     body: Data? = nil,
     headers: [String: String] = [:],
-    bearer: String? = nil
+    bearer: String? = nil,
+    timeout: TimeInterval? = nil
   ) throws -> URLRequest {
     var req = URLRequest(url: try url(path: path))
     req.httpMethod = method
@@ -60,6 +61,9 @@ public final class HTTPClient: @unchecked Sendable {
     for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
     if let bearer {
       req.setValue("Bearer \(bearer)", forHTTPHeaderField: "Authorization")
+    }
+    if let timeout {
+      req.timeoutInterval = timeout
     }
     // Attach cookies for this URL (ephemeral jar).
     if let cookies = cookieStorage.cookies(for: req.url!) {
@@ -118,7 +122,8 @@ public final class HTTPClient: @unchecked Sendable {
     headers: [String: String] = [:],
     bearer: String? = nil,
     as type: T.Type = T.self,
-    okStatuses: Set<Int> = Set(200...299)
+    okStatuses: Set<Int> = Set(200...299),
+    timeout: TimeInterval? = nil
   ) async throws -> T {
     let dataBody: Data?
     if let body {
@@ -126,7 +131,14 @@ public final class HTTPClient: @unchecked Sendable {
     } else {
       dataBody = nil
     }
-    let req = try request(method: method, path: path, body: dataBody, headers: headers, bearer: bearer)
+    let req = try request(
+      method: method,
+      path: path,
+      body: dataBody,
+      headers: headers,
+      bearer: bearer,
+      timeout: timeout
+    )
     let (data, http) = try await send(req)
     if !okStatuses.contains(http.statusCode) {
       let message = Self.extractErrorMessage(data)
@@ -159,11 +171,24 @@ public final class HTTPClient: @unchecked Sendable {
   }
 
   public static func extractErrorMessage(_ data: Data) -> String? {
-    struct Err: Decodable { let error: String?; let message: String? }
-    guard let e = try? JSONDecoder().decode(Err.self, from: data) else {
-      return String(data: data, encoding: .utf8).flatMap { $0.isEmpty ? nil : $0 }
+    struct ErrObj: Decodable {
+      let error: FlexibleError?
+      let message: String?
+      struct FlexibleError: Decodable {
+        let message: String?
+        let code: String?
+        // Plane may send error as a bare string in some paths; handle via string fallback below.
+      }
     }
-    return e.error ?? e.message
+    if let e = try? JSONDecoder().decode(ErrObj.self, from: data) {
+      if let m = e.error?.message ?? e.error?.code ?? e.message { return m }
+    }
+    // Bare string error field
+    struct ErrStr: Decodable { let error: String?; let message: String? }
+    if let e = try? JSONDecoder().decode(ErrStr.self, from: data) {
+      return e.error ?? e.message
+    }
+    return String(data: data, encoding: .utf8).flatMap { $0.isEmpty ? nil : $0 }
   }
 
   // MARK: - Cookie jar helpers (playground session)

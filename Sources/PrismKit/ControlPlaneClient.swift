@@ -171,4 +171,55 @@ public final class ControlPlaneClient: @unchecked Sendable {
     messages.append(ControlPlaneChatMessage(role: "user", content: user))
     return try await chat(model: model, messages: messages)
   }
+
+  // MARK: - Image / video (unit-priced)
+
+  /// Long-running non-chat doors; default 5 minutes (plane UPSTREAM_TIMEOUT often 60s, but UB can lag).
+  public static let nonChatTimeout: TimeInterval = 300
+
+  /// `POST /v1/images/generations` -- returns `data[].b64_json`.
+  public func generateImage(_ body: ImageGenerationRequest) async throws -> ImageGenerationResponse {
+    let key = try requireKey()
+    let res: ImageGenerationResponse = try await http.sendJSON(
+      method: "POST",
+      path: "/v1/images/generations",
+      body: body,
+      bearer: key,
+      timeout: Self.nonChatTimeout
+    )
+    if let err = res.error {
+      throw PrismError.serverError(err.message ?? err.code ?? "image generation error")
+    }
+    guard res.firstBase64 != nil || res.data?.first?.url != nil else {
+      throw PrismError.serverError("Empty image payload")
+    }
+    return res
+  }
+
+  public func generateImage(model: String, prompt: String) async throws -> ImageGenerationResponse {
+    try await generateImage(ImageGenerationRequest(model: model, prompt: prompt))
+  }
+
+  /// `POST /v1/videos/generations` -- `video` is a URL or inline asset.
+  public func generateVideo(_ body: VideoGenerationRequest) async throws -> VideoGenerationResponse {
+    let key = try requireKey()
+    let res: VideoGenerationResponse = try await http.sendJSON(
+      method: "POST",
+      path: "/v1/videos/generations",
+      body: body,
+      bearer: key,
+      timeout: Self.nonChatTimeout
+    )
+    if let err = res.error {
+      throw PrismError.serverError(err.message ?? err.code ?? "video generation error")
+    }
+    guard let video = res.video, !video.isEmpty else {
+      throw PrismError.serverError("Empty video payload")
+    }
+    return res
+  }
+
+  public func generateVideo(model: String, prompt: String, image: String? = nil) async throws -> VideoGenerationResponse {
+    try await generateVideo(VideoGenerationRequest(model: model, prompt: prompt, image: image))
+  }
 }

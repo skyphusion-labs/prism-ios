@@ -7,8 +7,8 @@ Guidance for agents working in this repository.
 **AGPL iOS client for Prism.** Shared Swift package (`PrismKit`) plus a SwiftUI app shell
 (`App/` + `Prism.xcodeproj`) for login, model pick, and chat against the playground Worker.
 
-**Status:** kit 0.4 + dual backend, streaming, session restore, StoreKit top-up UI. ASC app
-`6798391677` + 3 credit IAPs. Aviation-grade `main`. Next: plane receipt redeem when un-parked.
+**Status:** kit 0.5 + dual backend, chat/image/video plane doors, StoreKit top-up UI. ASC app
+`6798391677`. Aviation-grade `main`. Next: plane receipt redeem when un-parked.
 
 ## Related
 
@@ -29,7 +29,7 @@ Guidance for agents working in this repository.
 ## Clients
 
 - **`PrismClient`** -- playground Worker. Public mode session cookie after login. `chatStreamEvents` for incremental SSE.
-- **`ControlPlaneClient`** -- metered plane, `Bearer pcp_…`. Enroll, `me` / models, chat + `chatCompletionsStream` (OpenAI SSE).
+- **`ControlPlaneClient`** -- metered plane, `Bearer pcp_…`. Enroll, me/models, chat stream, `generateImage` / `generateVideo`.
 - **`SSEParser`** -- playground `{type:delta}` and OpenAI `choices[].delta.content` frames.
 - **`SecretStore` / `KeychainSecretStore`** -- plane device key, playground session cookie, URL prefs (memory store on Linux CI).
 - **Session restore** -- `PrismClient.exportSessionToken` / `restoreSessionToken` for `__Host-prism_session`.

@@ -18,6 +18,7 @@
 		B9DEEA98E63BEE7F2FC9A6EE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E02BE541FF59B758F2AECB0 /* SettingsView.swift */; };
 		C6F007D55BBA410ABB9E2DF1 /* PrismApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4115D7B498B51A37C0C1059 /* PrismApp.swift */; };
 		E72183EE09D6643B45C7A504 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 20325D4A56CE1D2FAD548CC0 /* Assets.xcassets */; };
+		F8CA0D87C3AAE424FB53327F /* MediaGenerateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B380EA7A1F0D104D733EB197 /* MediaGenerateView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -29,6 +30,7 @@
 		80E2E3B365ADCF50760B2280 /* ModelPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelPickerView.swift; sourceTree = "<group>"; };
 		8DC2EA274A0490B6F0DEC5FD /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		94567EB75BC9121E95247AB1 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
+		B380EA7A1F0D104D733EB197 /* MediaGenerateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaGenerateView.swift; sourceTree = "<group>"; };
 		C4115D7B498B51A37C0C1059 /* PrismApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrismApp.swift; sourceTree = "<group>"; };
 		F65D9A85386E8EFA1A6D0C70 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		F6CB6EC66875B30FD0229C59 /* StoreManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreManager.swift; sourceTree = "<group>"; };
@@ -64,6 +66,7 @@
 				F65D9A85386E8EFA1A6D0C70 /* ChatView.swift */,
 				0044568A64445857E24FD409 /* EnrollView.swift */,
 				94567EB75BC9121E95247AB1 /* LoginView.swift */,
+				B380EA7A1F0D104D733EB197 /* MediaGenerateView.swift */,
 				80E2E3B365ADCF50760B2280 /* ModelPickerView.swift */,
 				C4115D7B498B51A37C0C1059 /* PrismApp.swift */,
 				8DC2EA274A0490B6F0DEC5FD /* RootView.swift */,
@@ -169,6 +172,7 @@
 				8C3819507DE7FD87AA8679F9 /* ChatView.swift in Sources */,
 				898BA0DED59FDABB75D032A7 /* EnrollView.swift in Sources */,
 				33360F83FD87F9DD968DFA2F /* LoginView.swift in Sources */,
+				F8CA0D87C3AAE424FB53327F /* MediaGenerateView.swift in Sources */,
 				16D11E1C37D023255B71B397 /* ModelPickerView.swift in Sources */,
 				C6F007D55BBA410ABB9E2DF1 /* PrismApp.swift in Sources */,
 				15F542070E4ECF32304AE4D4 /* RootView.swift in Sources */,
