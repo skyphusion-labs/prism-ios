@@ -7,9 +7,8 @@ Guidance for agents working in this repository.
 **AGPL iOS client for Prism.** Shared Swift package (`PrismKit`) plus a SwiftUI app shell
 (`App/` + `Prism.xcodeproj`) for login, model pick, and chat against the playground Worker.
 
-**Status:** kit 0.3.1 + dual backend, streaming, Keychain session restore. ASC app `6798391677`
-+ 3 credit IAPs READY_TO_SUBMIT. Aviation-grade `main`. Next: StoreKit purchase UI; plane
-receipt redeem when contract un-parks it.
+**Status:** kit 0.4 + dual backend, streaming, session restore, StoreKit top-up UI. ASC app
+`6798391677` + 3 credit IAPs. Aviation-grade `main`. Next: plane receipt redeem when un-parked.
 
 ## Related
 
