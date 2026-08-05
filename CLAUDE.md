@@ -42,6 +42,20 @@ xcodegen generate          # refresh Prism.xcodeproj from project.yml
 xcodebuild -scheme Prism -destination 'generic/platform=iOS Simulator' build
 ```
 
+## Apple Developer / App Store Connect (CLI)
+
+Use **`asc`** (`brew install asc`), not the dashboard, once an API key is registered:
+
+```bash
+asc auth login --name skyphusion --key-id … --issuer-id … --private-key ~/.config/skyphusion/AuthKey_….p8 --network
+asc auth status
+asc apps list
+```
+
+Setup steps: `docs/apple-cli.md`. Command catalog: `docs/ASC.md`. Credentials live in
+macOS keychain (or `chmod 600` env under `~/.config/skyphusion/`); never in the repo.
+Plane store-receipt / commercial pricing remain deferred on the control-plane contract.
+
 ## CI
 
 - `.github/workflows/ci.yml` -- `swift test` on Ubuntu (package only)

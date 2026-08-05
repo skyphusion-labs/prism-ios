@@ -34,6 +34,11 @@ open Prism.xcodeproj
 
 Default server: `https://play.skyphusion.org` (public signup). Settings can point at a self-host Worker.
 
+## App Store Connect (CLI)
+
+[asc](https://asccli.sh) is installed for App Store Connect API work (apps, bundle IDs, IAP, signing).
+See [docs/apple-cli.md](docs/apple-cli.md) for API-key login and [docs/ASC.md](docs/ASC.md) for the command map.
+
 ## Package tests
 
 ```bash
