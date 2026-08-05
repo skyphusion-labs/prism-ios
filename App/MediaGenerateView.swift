@@ -66,6 +66,12 @@ struct MediaGenerateView: View {
         Section {
           TextField(kind == .image ? "Image prompt" : "Video prompt", text: promptBinding, axis: .vertical)
             .lineLimit(3...8)
+          if kind == .image {
+            TextField(imageRefPlaceholder, text: $state.imageImageRef, axis: .vertical)
+              .lineLimit(2...4)
+              .textInputAutocapitalization(.never)
+              .autocorrectionDisabled()
+          }
           if kind == .video {
             TextField("Optional image URL or data:… (i2v)", text: $state.videoImageRef, axis: .vertical)
               .lineLimit(2...4)
@@ -201,11 +207,32 @@ struct MediaGenerateView: View {
   }
 
   private func shortLabel(_ m: ModelEntry) -> String {
-    m.label ?? m.model
+    let base = m.label ?? m.model
+    let caps = m.capabilities ?? []
+    if caps.contains("image-input-required") { return "\(base) · i2i only" }
+    if caps.contains("image-input"), (m.type == "image" || kind == .image) {
+      return "\(base) · +ref"
+    }
+    return base
+  }
+
+  private var imageRefPlaceholder: String {
+    let caps = state.selectedImageModel?.capabilities ?? []
+    if caps.contains("image-input-required") {
+      return "Required reference image URL or data:… (i2i)"
+    }
+    if caps.contains("image-input") {
+      return "Optional reference image URL or data:… (i2i / edit)"
+    }
+    return "Optional reference image (ignored if model is pure t2i)"
   }
 
   private var imageFooter: String {
-    "POST /v1/images/generations. Many models return a URL (shown below); Flux returns inline base64. Prefer flux-1-schnell if decode fails."
+    let caps = state.selectedImageModel?.capabilities ?? []
+    if caps.contains("image-input"), caps.contains("text-to-image") {
+      return "This model does text-to-image and optional i2i/edit. Paste a reference URL above to condition on an image. Flux-1-schnell / Imagen / Seedream are pure t2i."
+    }
+    return "POST /v1/images/generations. Pure t2i models ignore the reference field. Many UB models return a URL (shown below)."
   }
 
   private var videoFooter: String {

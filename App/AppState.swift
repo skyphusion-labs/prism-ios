@@ -82,6 +82,8 @@ final class AppState: ObservableObject {
   // MARK: - Image / video (control plane)
 
   @Published var imagePrompt: String = ""
+  /// Optional reference image (https or data:) for i2i / edit models.
+  @Published var imageImageRef: String = ""
   @Published var lastImageBase64: String?
   @Published var lastImageURL: String?
   @Published var lastImageModel: String?
@@ -637,8 +639,18 @@ final class AppState: ObservableObject {
     lastImageBase64 = nil
     lastImageURL = nil
     defer { mediaBusy = false }
+    let imageRef = imageImageRef.trimmingCharacters(in: .whitespacesAndNewlines)
+    let caps = model.capabilities ?? []
+    if caps.contains("image-input-required"), imageRef.isEmpty {
+      mediaError = "This model requires a reference image (i2i). Paste an https or data: URL."
+      return
+    }
     do {
-      let res = try await controlPlane.generateImage(model: model.model, prompt: prompt)
+      let res = try await controlPlane.generateImage(
+        model: model.model,
+        prompt: prompt,
+        image: imageRef.isEmpty ? nil : imageRef
+      )
       lastImageBase64 = res.firstBase64
       lastImageURL = res.firstDisplayURL
       lastImageModel = res.model ?? model.model

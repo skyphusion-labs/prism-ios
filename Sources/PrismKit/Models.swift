@@ -223,17 +223,23 @@ public struct ControlPlaneModel: Codable, Sendable, Equatable, Identifiable {
   public let max_output_tokens: Int?
   /// Whether the plane will run this model today (`false` => grey out, do not drop).
   public let spendable: Bool?
+  /// Picker hints: `text-to-image`, `image-input`, `image-input-required`, `text-to-video`, …
+  public let capabilities: [String]?
 
   /// Map into the playground-shaped picker entry used by the app shell.
   public func asModelEntry() -> ModelEntry {
-    ModelEntry(
+    var caps = capabilities ?? []
+    if spendable == false, !caps.contains("unspendable") {
+      caps.append("unspendable")
+    }
+    return ModelEntry(
       model: id,
       label: display_name,
       type: modality ?? "chat",
       provider: billing,
       streaming: streaming,
       group: tier,
-      capabilities: spendable == false ? ["unspendable"] : nil
+      capabilities: caps.isEmpty ? nil : caps
     )
   }
 }
@@ -333,14 +339,17 @@ public struct ControlPlaneErrorBody: Codable, Sendable, Equatable {
 
 // MARK: - Control plane image / video (unit-priced doors)
 
-/// `POST /v1/images/generations` body (`model` + `prompt`).
+/// `POST /v1/images/generations` body. `image` is optional ref for i2i / edit.
 public struct ImageGenerationRequest: Codable, Sendable, Equatable {
   public var model: String
   public var prompt: String
+  /// Optional https or data: URL for models that accept reference images.
+  public var image: String?
 
-  public init(model: String, prompt: String) {
+  public init(model: String, prompt: String, image: String? = nil) {
     self.model = model
     self.prompt = prompt
+    self.image = image
   }
 }
 
