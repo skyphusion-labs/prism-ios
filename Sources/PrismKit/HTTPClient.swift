@@ -12,7 +12,9 @@ public final class HTTPClient: @unchecked Sendable {
 
   public init(baseURL: URL, session: URLSession? = nil, cookieStorage: HTTPCookieStorage? = nil) {
     self.baseURL = baseURL
-    let storage = cookieStorage ?? HTTPCookieStorage()
+    // On Apple platforms HTTPCookieStorage() is fine; on Linux (FoundationNetworking)
+    // only shared / named stores are available -- use shared for the default jar.
+    let storage = cookieStorage ?? HTTPCookieStorage.shared
     self.cookieStorage = storage
     if let session {
       self.session = session
@@ -68,21 +70,45 @@ public final class HTTPClient: @unchecked Sendable {
   }
 
   public func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
-    let (data, response): (Data, URLResponse)
+    let pair: (Data, URLResponse)
     do {
-      (data, response) = try await session.data(for: request)
+      pair = try await perform(request)
     } catch {
       throw PrismError.transport(error.localizedDescription)
     }
+    let (body, response) = pair
     guard let http = response as? HTTPURLResponse else {
       throw PrismError.transport("Non-HTTP response")
     }
     // Persist Set-Cookie into our jar (needed when URLSession config does not).
-    if let url = http.url, let fields = http.allHeaderFields as? [String: String] {
+    if let url = http.url {
+      // allHeaderFields values are not always String on every platform.
+      var fields: [String: String] = [:]
+      for (k, v) in http.allHeaderFields {
+        fields[String(describing: k)] = String(describing: v)
+      }
       let cookies = HTTPCookie.cookies(withResponseHeaderFields: fields, for: url)
       cookies.forEach { cookieStorage.setCookie($0) }
     }
-    return (data, http)
+    return (body, http)
+  }
+
+  /// URLSession.data(for:) is Apple-only in some toolchains; bridge via completion handler for Linux CI.
+  private func perform(_ request: URLRequest) async throws -> (Data, URLResponse) {
+    try await withCheckedThrowingContinuation { cont in
+      let task = session.dataTask(with: request) { data, response, error in
+        if let error {
+          cont.resume(throwing: error)
+          return
+        }
+        guard let data, let response else {
+          cont.resume(throwing: URLError(.badServerResponse))
+          return
+        }
+        cont.resume(returning: (data, response))
+      }
+      task.resume()
+    }
   }
 
   public func sendJSON<T: Decodable>(

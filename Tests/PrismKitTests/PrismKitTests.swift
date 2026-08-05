@@ -111,7 +111,7 @@ final class PrismClientHTTPTests: XCTestCase {
   private func makeClient() -> PrismClient {
     let config = URLSessionConfiguration.ephemeral
     config.protocolClasses = [MockURLProtocol.self]
-    let storage = HTTPCookieStorage()
+    let storage = HTTPCookieStorage.shared
     config.httpCookieStorage = storage
     config.httpCookieAcceptPolicy = .always
     config.httpShouldSetCookies = true
