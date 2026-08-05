@@ -1,0 +1,62 @@
+name: Prism
+options:
+  bundleIdPrefix: org.skyphusion
+  deploymentTarget:
+    iOS: "16.0"
+    macOS: "13.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+packages:
+  PrismKitLocal:
+    path: .
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+
+targets:
+  Prism:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: App
+        excludes:
+          - Info.plist
+    resources:
+      - path: App/Assets.xcassets
+    dependencies:
+      - package: PrismKitLocal
+        product: PrismKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.skyphusion.prism
+        PRODUCT_NAME: Prism
+        TARGETED_DEVICE_FAMILY: "1,2"
+        INFOPLIST_KEY_CFBundleDisplayName: Prism
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_EMIT_LOC_STRINGS: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: Prism
+        UILaunchScreen: {}
+        UIApplicationSupportsIndirectInputEvents: true
+
+schemes:
+  Prism:
+    build:
+      targets:
+        Prism: all
+    run:
+      config: Debug
+    test:
+      config: Debug
