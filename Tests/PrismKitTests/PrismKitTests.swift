@@ -9,7 +9,50 @@ import FoundationNetworking
 final class PrismKitTests: XCTestCase {
   func testHealthString() {
     XCTAssertEqual(PrismKit.health(), "ok:PrismKit")
-    XCTAssertEqual(PrismKit.version, "0.1.0")
+    XCTAssertEqual(PrismKit.version, "0.2.0")
+  }
+
+  func testMemorySecretStoreRoundTrip() throws {
+    let store = MemorySecretStore()
+    XCTAssertNil(try store.get("k"))
+    try store.set("v", for: "k")
+    XCTAssertEqual(try store.get("k"), "v")
+    try store.set(nil, for: "k")
+    XCTAssertNil(try store.get("k"))
+  }
+
+  func testControlPlaneModelAsEntry() throws {
+    let json = """
+    {
+      "object":"list",
+      "data":[{
+        "id":"@cf/meta/llama",
+        "display_name":"Llama",
+        "modality":"chat",
+        "billing":"workers-ai",
+        "tier":"standard",
+        "streaming":true,
+        "max_output_tokens":4096,
+        "spendable":true,
+        "price":null,
+        "published_rates":[]
+      }]
+    }
+    """.data(using: .utf8)!
+    let list = try JSONDecoder().decode(ControlPlaneModelList.self, from: json)
+    XCTAssertEqual(list.data.count, 1)
+    let entry = list.data[0].asModelEntry()
+    XCTAssertEqual(entry.model, "@cf/meta/llama")
+    XCTAssertEqual(entry.label, "Llama")
+    XCTAssertEqual(entry.type, "chat")
+    XCTAssertEqual(entry.streaming, true)
+  }
+
+  func testUsageBalanceDescription() throws {
+    let json = #"{"spendable_remaining_micro_usd":1500000,"period":"2026-08"}"#.data(using: .utf8)!
+    let u = try JSONDecoder().decode(UsageSummary.self, from: json)
+    XCTAssertTrue(u.balanceDescription.contains("1.5000") || u.balanceDescription.contains("1.5"))
+    XCTAssertTrue(u.balanceDescription.contains("2026-08"))
   }
 
   func testSSEParserDeltasAndDone() {
@@ -76,6 +119,8 @@ final class MockURLProtocol: URLProtocol {
   nonisolated(unsafe) static var handler: ((URLRequest) throws -> (Int, Data, [String: String]))?
 
   override class func canInit(with request: URLRequest) -> Bool { true }
+  /// Required for `URLSession.bytes` / task-based loading (incremental SSE path).
+  override class func canInit(with task: URLSessionTask) -> Bool { true }
   override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
   override func startLoading() {
@@ -92,7 +137,10 @@ final class MockURLProtocol: URLProtocol {
         headerFields: headers
       )!
       client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-      client?.urlProtocol(self, didLoad: data)
+      // Deliver in chunks so AsyncBytes.lines can form frames (single blob is fine too).
+      if !data.isEmpty {
+        client?.urlProtocol(self, didLoad: data)
+      }
       client?.urlProtocolDidFinishLoading(self)
     } catch {
       client?.urlProtocol(self, didFailWithError: error)
@@ -241,6 +289,33 @@ final class ControlPlaneClientTests: XCTestCase {
     XCTAssertEqual(client.clientKey, "pcp_abc_secret")
     let text = try await client.chat(model: "gpt", user: "ping")
     XCTAssertEqual(text, "pong")
+  }
+
+  func testListModelsAndMe() async throws {
+    MockURLProtocol.handler = { req in
+      let path = req.url?.path ?? ""
+      let auth = req.value(forHTTPHeaderField: "Authorization") ?? ""
+      XCTAssertEqual(auth, "Bearer pcp_test_key")
+      if path == "/v1/models" {
+        let body = """
+        {"object":"list","data":[{"id":"m1","display_name":"One","modality":"chat","billing":"workers-ai","tier":"standard","streaming":true,"max_output_tokens":1024,"spendable":true,"price":null,"published_rates":[]}]}
+        """.data(using: .utf8)!
+        return (200, body, ["Content-Type": "application/json"])
+      }
+      if path == "/v1/me" {
+        let body = """
+        {"client":{"id":"cli","label":"phone"},"account":{"id":"acc","status":"active"},"usage":{"spendable_remaining_micro_usd":100,"period":"2026-08"}}
+        """.data(using: .utf8)!
+        return (200, body, ["Content-Type": "application/json"])
+      }
+      return (404, Data("missing \(path)".utf8), [:])
+    }
+    let client = makeClient(key: "pcp_test_key")
+    let models = try await client.listModels()
+    XCTAssertEqual(models.data.first?.id, "m1")
+    let me = try await client.me()
+    XCTAssertEqual(me.client?.label, "phone")
+    XCTAssertEqual(me.usage?.spendable_remaining_micro_usd, 100)
   }
 
   func testChatRequiresKey() async {

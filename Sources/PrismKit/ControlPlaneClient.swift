@@ -63,9 +63,24 @@ public final class ControlPlaneClient: @unchecked Sendable {
 
   // MARK: - Account
 
-  public func me() async throws -> AccountSummary {
+  /// Account, plan, and current-period usage (`GET /v1/me`).
+  public func me() async throws -> MeResponse {
     let key = try requireKey()
-    return try await http.sendJSON(method: "GET", path: "/v1/clients/me", bearer: key)
+    return try await http.sendJSON(method: "GET", path: "/v1/me", bearer: key)
+  }
+
+  /// Current-period usage detail (`GET /v1/usage`).
+  public func usage() async throws -> UsageSummary {
+    let key = try requireKey()
+    return try await http.sendJSON(method: "GET", path: "/v1/usage", bearer: key)
+  }
+
+  // MARK: - Models
+
+  /// Entitled model list with prices (`GET /v1/models`). Absent models are not entitled.
+  public func listModels() async throws -> ControlPlaneModelList {
+    let key = try requireKey()
+    return try await http.sendJSON(method: "GET", path: "/v1/models", bearer: key)
   }
 
   // MARK: - Inference
@@ -84,6 +99,15 @@ public final class ControlPlaneClient: @unchecked Sendable {
     return res
   }
 
+  /// Multi-turn chat (non-streaming). Prefer building `messages` from the UI transcript.
+  public func chat(model: String, messages: [ControlPlaneChatMessage]) async throws -> String {
+    let res = try await chatCompletions(ControlPlaneChatRequest(model: model, messages: messages, stream: false))
+    guard let text = res.firstContent, !text.isEmpty else {
+      throw PrismError.serverError("Empty completion")
+    }
+    return text
+  }
+
   /// Simple single-turn helper.
   public func chat(model: String, user: String, system: String? = nil) async throws -> String {
     var messages: [ControlPlaneChatMessage] = []
@@ -91,10 +115,6 @@ public final class ControlPlaneClient: @unchecked Sendable {
       messages.append(ControlPlaneChatMessage(role: "system", content: system))
     }
     messages.append(ControlPlaneChatMessage(role: "user", content: user))
-    let res = try await chatCompletions(ControlPlaneChatRequest(model: model, messages: messages))
-    guard let text = res.firstContent, !text.isEmpty else {
-      throw PrismError.serverError("Empty completion")
-    }
-    return text
+    return try await chat(model: model, messages: messages)
   }
 }

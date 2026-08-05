@@ -1,6 +1,9 @@
 import Foundation
 import PrismKit
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// In-memory chat turn for the shell UI.
 struct ChatTurn: Identifiable, Equatable {
@@ -21,19 +24,45 @@ struct ChatTurn: Identifiable, Equatable {
   }
 }
 
+/// Which inference backend the app talks to.
+enum BackendKind: String, CaseIterable, Identifiable {
+  case playground
+  case controlPlane
+
+  var id: String { rawValue }
+
+  var title: String {
+    switch self {
+    case .playground: return "Playground"
+    case .controlPlane: return "Control plane"
+    }
+  }
+}
+
 @MainActor
 final class AppState: ObservableObject {
-  // MARK: - Connection
+  // MARK: - Backend
+
+  @Published var backend: BackendKind = .playground
 
   /// Playground base URL (public or self-host).
   @Published var baseURLString: String = PrismClient.playBaseURL.absoluteString
+  /// Control plane origin (`play-proxy.skyphusion.org`).
+  @Published var controlPlaneURLString: String = ControlPlaneClient.productionBaseURL.absoluteString
 
-  // MARK: - Auth
+  // MARK: - Auth (playground public)
 
   @Published var username: String = ""
   @Published var password: String = ""
   @Published var authenticated: Bool = false
   @Published var sessionUsername: String?
+
+  // MARK: - Control plane device key
+
+  @Published var enrollmentToken: String = ""
+  @Published var deviceKeyPresent: Bool = false
+  @Published var planeClientLabel: String?
+  @Published var planeBalance: String?
 
   // MARK: - Catalog
 
@@ -54,10 +83,17 @@ final class AppState: ObservableObject {
   @Published var banner: String?
   @Published var errorMessage: String?
 
-  private var client: PrismClient
+  private let secrets: any SecretStore
+  private var playground: PrismClient
+  private var controlPlane: ControlPlaneClient
 
-  init() {
-    client = PrismClient(baseURL: PrismClient.playBaseURL)
+  init(secrets: (any SecretStore)? = nil) {
+    let store = secrets ?? SecretStores.default()
+    self.secrets = store
+    playground = PrismClient(baseURL: PrismClient.playBaseURL)
+    controlPlane = ControlPlaneClient()
+    loadPersisted()
+    rebuildClients(clearSession: false)
   }
 
   var chatModels: [ModelEntry] {
@@ -68,44 +104,150 @@ final class AppState: ObservableObject {
     chatModels.first { $0.model == selectedModelId } ?? chatModels.first
   }
 
+  /// True when the current backend can chat (signed-in playground, or plane with key).
+  var canChat: Bool {
+    switch backend {
+    case .playground:
+      if authMode == "public" { return authenticated }
+      return true
+    case .controlPlane:
+      return deviceKeyPresent
+    }
+  }
+
+  /// Show first-party login for public playground only.
+  var needsPlaygroundLogin: Bool {
+    backend == .playground && authMode == "public" && !authenticated
+  }
+
+  /// Show enrollment when plane is selected without a stored device key.
+  var needsPlaneEnroll: Bool {
+    backend == .controlPlane && !deviceKeyPresent
+  }
+
   // MARK: - Lifecycle
 
   func bootstrap() async {
-    rebuildClient()
+    rebuildClients(clearSession: false)
     await refreshModels()
   }
 
-  func rebuildClient() {
-    let trimmed = baseURLString.trimmingCharacters(in: .whitespacesAndNewlines)
-    let url = URL(string: trimmed) ?? PrismClient.playBaseURL
-    client = PrismClient(baseURL: url)
-    authenticated = false
-    sessionUsername = nil
-    conversationId = nil
-    turns = []
+  func loadPersisted() {
+    if let raw = try? secrets.get(SecretStoreKeys.backendMode),
+       let kind = BackendKind(rawValue: raw) {
+      backend = kind
+    }
+    if let u = try? secrets.get(SecretStoreKeys.playgroundBaseURL), !u.isEmpty {
+      baseURLString = u
+    }
+    if let u = try? secrets.get(SecretStoreKeys.controlPlaneBaseURL), !u.isEmpty {
+      controlPlaneURLString = u
+    }
+    if let key = try? secrets.get(SecretStoreKeys.controlPlaneDeviceKey), !key.isEmpty {
+      controlPlane.setClientKey(key)
+      deviceKeyPresent = true
+    } else {
+      deviceKeyPresent = false
+    }
+  }
+
+  func persistSettings() {
+    try? secrets.set(backend.rawValue, for: SecretStoreKeys.backendMode)
+    try? secrets.set(baseURLString, for: SecretStoreKeys.playgroundBaseURL)
+    try? secrets.set(controlPlaneURLString, for: SecretStoreKeys.controlPlaneBaseURL)
+  }
+
+  func rebuildClients(clearSession: Bool = true) {
+    let playURL =
+      URL(string: baseURLString.trimmingCharacters(in: .whitespacesAndNewlines))
+      ?? PrismClient.playBaseURL
+    playground = PrismClient(baseURL: playURL)
+
+    let planeURL =
+      URL(string: controlPlaneURLString.trimmingCharacters(in: .whitespacesAndNewlines))
+      ?? ControlPlaneClient.productionBaseURL
+    let existingKey = try? secrets.get(SecretStoreKeys.controlPlaneDeviceKey)
+    controlPlane = ControlPlaneClient(baseURL: planeURL, clientKey: existingKey)
+    deviceKeyPresent = existingKey.map { !$0.isEmpty } ?? false
+
+    persistSettings()
+
+    if clearSession {
+      authenticated = false
+      sessionUsername = nil
+      conversationId = nil
+      turns = []
+      models = []
+      planeBalance = nil
+      planeClientLabel = nil
+    }
+  }
+
+  func setBackend(_ kind: BackendKind) {
+    backend = kind
+    rebuildClients(clearSession: true)
+    Task { await refreshModels() }
   }
 
   func refreshModels() async {
     isBusy = true
     errorMessage = nil
     defer { isBusy = false }
+    switch backend {
+    case .playground:
+      await refreshPlaygroundModels()
+    case .controlPlane:
+      await refreshPlaneModels()
+    }
+  }
+
+  private func refreshPlaygroundModels() async {
     do {
-      let res = try await client.models()
+      let res = try await playground.models()
       models = res.models
       authMode = res.mode
       authenticated = res.authenticated == true
       sessionUsername = res.username
-      if selectedModelId == nil {
-        selectedModelId = chatModels.first(where: { $0.streaming == true })?.model
-          ?? chatModels.first?.model
-      }
-      banner = statusBanner(from: res)
+      pickDefaultModel()
+      banner = statusBannerPlayground(from: res)
     } catch {
       errorMessage = error.localizedDescription
     }
   }
 
-  private func statusBanner(from res: ModelsResponse) -> String {
+  private func refreshPlaneModels() async {
+    authMode = "control-plane"
+    guard deviceKeyPresent else {
+      models = []
+      banner = "Control plane · no device key · enroll in Settings"
+      return
+    }
+    do {
+      let list = try await controlPlane.listModels()
+      models = list.data.map { $0.asModelEntry() }
+      pickDefaultModel()
+      if let me = try? await controlPlane.me() {
+        planeClientLabel = me.client?.label ?? me.client?.id
+        planeBalance = me.usage?.balanceDescription
+        banner = statusBannerPlane(modelCount: models.count, me: me)
+      } else {
+        banner = "Control plane · \(models.count) models"
+      }
+      authenticated = true
+    } catch {
+      errorMessage = error.localizedDescription
+      banner = "Control plane · error loading models"
+    }
+  }
+
+  private func pickDefaultModel() {
+    if selectedModelId == nil || !chatModels.contains(where: { $0.model == selectedModelId }) {
+      selectedModelId = chatModels.first(where: { $0.streaming == true })?.model
+        ?? chatModels.first?.model
+    }
+  }
+
+  private func statusBannerPlayground(from res: ModelsResponse) -> String {
     let mode = res.mode ?? "unknown"
     if res.authenticated == true {
       let who = res.username ?? res.user ?? "signed in"
@@ -114,14 +256,23 @@ final class AppState: ObservableObject {
     return "\(mode) · not signed in · \(res.models.count) models"
   }
 
-  // MARK: - Auth
+  private func statusBannerPlane(modelCount: Int, me: MeResponse) -> String {
+    let who = me.client?.label ?? me.client?.id ?? "device"
+    let bal = me.usage?.balanceDescription ?? ""
+    if bal.isEmpty {
+      return "control-plane · \(who) · \(modelCount) models"
+    }
+    return "control-plane · \(who) · \(bal)"
+  }
+
+  // MARK: - Auth (playground)
 
   func login() async {
     isBusy = true
     errorMessage = nil
     defer { isBusy = false }
     do {
-      let res = try await client.login(username: username, password: password)
+      let res = try await playground.login(username: username, password: password)
       sessionUsername = res.user?.username ?? username
       authenticated = true
       password = ""
@@ -137,7 +288,7 @@ final class AppState: ObservableObject {
     errorMessage = nil
     defer { isBusy = false }
     do {
-      let res = try await client.signup(username: username, password: password)
+      let res = try await playground.signup(username: username, password: password)
       sessionUsername = res.user?.username ?? username
       authenticated = true
       password = ""
@@ -152,17 +303,82 @@ final class AppState: ObservableObject {
     isBusy = true
     errorMessage = nil
     defer { isBusy = false }
-    do {
-      try await client.logout()
-    } catch {
-      // Still clear local session state.
-      errorMessage = error.localizedDescription
+    if backend == .playground {
+      do {
+        try await playground.logout()
+      } catch {
+        errorMessage = error.localizedDescription
+      }
     }
     authenticated = false
     sessionUsername = nil
     conversationId = nil
     turns = []
     await refreshModels()
+  }
+
+  // MARK: - Control plane enroll
+
+  func enrollPlane() async {
+    let token = enrollmentToken.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !token.isEmpty else {
+      errorMessage = "Paste an enrollment token first."
+      return
+    }
+    isBusy = true
+    errorMessage = nil
+    defer { isBusy = false }
+    do {
+      rebuildClients(clearSession: false)
+      #if canImport(UIKit)
+      let label = UIDevice.current.name
+      #else
+      let label = "ios"
+      #endif
+      let res = try await controlPlane.enroll(
+        enrollmentToken: token,
+        label: label,
+        platform: "ios"
+      )
+      try secrets.set(res.key, for: SecretStoreKeys.controlPlaneDeviceKey)
+      deviceKeyPresent = true
+      enrollmentToken = ""
+      planeClientLabel = res.client_id
+      await refreshModels()
+    } catch {
+      errorMessage = error.localizedDescription
+      deviceKeyPresent = false
+    }
+  }
+
+  /// Paste or type a full `pcp_…` device key (recovery / side-load).
+  func saveDeviceKey(_ key: String) async {
+    let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard trimmed.hasPrefix("pcp_") else {
+      errorMessage = "Device key must start with pcp_."
+      return
+    }
+    do {
+      try secrets.set(trimmed, for: SecretStoreKeys.controlPlaneDeviceKey)
+      controlPlane.setClientKey(trimmed)
+      deviceKeyPresent = true
+      errorMessage = nil
+      await refreshModels()
+    } catch {
+      errorMessage = error.localizedDescription
+    }
+  }
+
+  func clearDeviceKey() async {
+    try? secrets.set(nil, for: SecretStoreKeys.controlPlaneDeviceKey)
+    controlPlane.setClientKey(nil)
+    deviceKeyPresent = false
+    models = []
+    planeBalance = nil
+    planeClientLabel = nil
+    turns = []
+    conversationId = nil
+    banner = "Control plane · device key cleared"
   }
 
   // MARK: - Chat
@@ -174,8 +390,11 @@ final class AppState: ObservableObject {
       errorMessage = "Pick a chat model first."
       return
     }
-    if authMode == "public", !authenticated {
-      errorMessage = "Sign in (or sign up) before chatting on the public playground."
+    if !canChat {
+      errorMessage =
+        backend == .controlPlane
+        ? "Enroll a device key before chatting on the control plane."
+        : "Sign in (or sign up) before chatting on the public playground."
       return
     }
 
@@ -188,25 +407,73 @@ final class AppState: ObservableObject {
     errorMessage = nil
     defer { isBusy = false }
 
-    let body = ChatRequestBody(
-      model: model.model,
-      userInput: text,
-      conversationId: conversationId
-    )
-
     do {
-      if useStream, model.streaming == true {
-        let (streamed, final) = try await client.chatStreamText(body)
-        updateAssistant(id: assistantId, text: streamed.isEmpty ? (final?.output ?? "") : streamed)
-        if let cid = final?.conversation_id { conversationId = cid }
-      } else {
-        let res = try await client.chat(body)
-        updateAssistant(id: assistantId, text: res.output ?? "")
-        if let cid = res.conversation_id { conversationId = cid }
+      switch backend {
+      case .playground:
+        try await sendPlayground(model: model, userText: text, assistantId: assistantId)
+      case .controlPlane:
+        try await sendPlane(model: model, assistantId: assistantId)
       }
     } catch {
       updateAssistant(id: assistantId, text: "(error) \(error.localizedDescription)")
       errorMessage = error.localizedDescription
+    }
+  }
+
+  private func sendPlayground(model: ModelEntry, userText: String, assistantId: UUID) async throws {
+    let body = ChatRequestBody(
+      model: model.model,
+      userInput: userText,
+      conversationId: conversationId
+    )
+    if useStream, model.streaming == true {
+      var assembled = ""
+      for try await event in playground.chatStreamEvents(body) {
+        switch event {
+        case .delta(let t):
+          assembled += t
+          updateAssistant(id: assistantId, text: assembled)
+        case .done(let final):
+          if let out = final.output, !out.isEmpty, assembled.isEmpty {
+            updateAssistant(id: assistantId, text: out)
+          } else if assembled.isEmpty {
+            updateAssistant(id: assistantId, text: final.output ?? "")
+          }
+          if let cid = final.conversation_id { conversationId = cid }
+        case .error(let m):
+          throw PrismError.serverError(m)
+        case .unknown:
+          break
+        }
+      }
+    } else {
+      let res = try await playground.chat(body)
+      updateAssistant(id: assistantId, text: res.output ?? "")
+      if let cid = res.conversation_id { conversationId = cid }
+    }
+  }
+
+  private func sendPlane(model: ModelEntry, assistantId: UUID) async throws {
+    // Build OpenAI-style messages from transcript (exclude empty assistant bubble).
+    var messages: [ControlPlaneChatMessage] = []
+    for turn in turns where turn.id != assistantId {
+      switch turn.role {
+      case .user:
+        messages.append(ControlPlaneChatMessage(role: "user", content: turn.text))
+      case .assistant:
+        if !turn.text.isEmpty {
+          messages.append(ControlPlaneChatMessage(role: "assistant", content: turn.text))
+        }
+      case .system:
+        messages.append(ControlPlaneChatMessage(role: "system", content: turn.text))
+      }
+    }
+    let text = try await controlPlane.chat(model: model.model, messages: messages)
+    updateAssistant(id: assistantId, text: text)
+    // Refresh balance after a spend (best-effort).
+    if let me = try? await controlPlane.me() {
+      planeBalance = me.usage?.balanceDescription
+      banner = statusBannerPlane(modelCount: models.count, me: me)
     }
   }
 

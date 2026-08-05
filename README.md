@@ -10,7 +10,7 @@
 AGPL **iOS client** for Prism:
 
 1. **`PrismKit`** (Swift package) -- HTTP clients for the playground Worker and commercial control plane.
-2. **`Prism` app** (SwiftUI) -- login / model pick / chat shell against the playground.
+2. **`Prism` app** (SwiftUI) -- login / enroll / model pick / chat against playground or control plane.
 
 ## Layout
 
@@ -45,9 +45,9 @@ CI runs package tests on Ubuntu. The iOS app is built with Xcode locally (not in
 
 ## Status
 
-- Kit: chat + auth + SSE against playground; control-plane client for `pcp_` keys.
-- App shell: public login/signup, model menu, streaming chat, base URL settings.
-- Next: Keychain for control-plane keys, plane enrollment UX, incremental SSE, StoreKit later.
+- Kit 0.2: playground chat/auth + incremental SSE; control plane enroll / `me` / models / chat; Keychain `SecretStore`.
+- App: backend picker (playground vs plane), public login, plane enrollment + Keychain device key, model menu, token-by-token playground stream.
+- Next: StoreKit top-up, control-plane OpenAI-style stream frames, optional session cookie persistence.
 
 ## Related
 

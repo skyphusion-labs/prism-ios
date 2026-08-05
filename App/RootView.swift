@@ -1,4 +1,5 @@
 import SwiftUI
+import PrismKit
 
 struct RootView: View {
   @EnvironmentObject private var state: AppState
@@ -6,8 +7,10 @@ struct RootView: View {
   var body: some View {
     NavigationStack {
       Group {
-        if state.authMode == "public", !state.authenticated {
+        if state.needsPlaygroundLogin {
           LoginView()
+        } else if state.needsPlaneEnroll {
+          EnrollView()
         } else {
           ChatView()
         }
@@ -31,5 +34,5 @@ struct RootView: View {
 
 #Preview {
   RootView()
-    .environmentObject(AppState())
+    .environmentObject(AppState(secrets: MemorySecretStore()))
 }

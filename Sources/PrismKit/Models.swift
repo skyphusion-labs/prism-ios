@@ -152,16 +152,99 @@ public struct ControlPlaneHealth: Codable, Sendable, Equatable {
   public let service: String?
 }
 
+/// Nested account blob on enrollment (subset; plane may add fields).
 public struct AccountSummary: Codable, Sendable, Equatable {
   public let id: String?
   public let credit_micro_usd: Int?
   public let plan: String?
+  public let plan_id: String?
+  public let status: String?
 }
 
 public struct EnrollmentResponse: Codable, Sendable, Equatable {
   public let client_id: String
   public let key: String
   public let account: AccountSummary?
+}
+
+// MARK: Control plane catalog (`GET /v1/models`)
+
+public struct ControlPlaneModelList: Codable, Sendable, Equatable {
+  public let object: String?
+  public let data: [ControlPlaneModel]
+}
+
+public struct ControlPlaneModel: Codable, Sendable, Equatable, Identifiable {
+  public let id: String
+  public let display_name: String?
+  public let modality: String?
+  public let billing: String?
+  public let tier: String?
+  public let streaming: Bool?
+  public let max_output_tokens: Int?
+  /// Whether the plane will run this model today (`false` => grey out, do not drop).
+  public let spendable: Bool?
+
+  /// Map into the playground-shaped picker entry used by the app shell.
+  public func asModelEntry() -> ModelEntry {
+    ModelEntry(
+      model: id,
+      label: display_name,
+      type: modality ?? "chat",
+      provider: billing,
+      streaming: streaming,
+      group: tier,
+      capabilities: spendable == false ? ["unspendable"] : nil
+    )
+  }
+}
+
+// MARK: Control plane account (`GET /v1/me`, `GET /v1/usage`)
+
+public struct MeResponse: Codable, Sendable, Equatable {
+  public let client: MeClientInfo?
+  public let account: AccountSummary?
+  public let plan: PlanSummary?
+  public let usage: UsageSummary?
+}
+
+public struct MeClientInfo: Codable, Sendable, Equatable {
+  public let id: String?
+  public let label: String?
+  public let platform: String?
+  public let created_at: String?
+}
+
+public struct PlanSummary: Codable, Sendable, Equatable {
+  public let id: String?
+  public let name: String?
+  public let monthly_included_micro_usd: Int?
+}
+
+/// Dual-pool usage (prepaid credit + monthly allowance). All fields optional for decode resilience.
+public struct UsageSummary: Codable, Sendable, Equatable {
+  public let credit_micro_usd: Int?
+  public let spent_micro_usd: Int?
+  public let remaining_micro_usd: Int?
+  public let monthly_included_micro_usd: Int?
+  public let allowance_spent_micro_usd: Int?
+  public let allowance_remaining_micro_usd: Int?
+  public let spendable_remaining_micro_usd: Int?
+  public let overage: Bool?
+  public let period: String?
+  public let period_micro_usd: Int?
+  public let period_requests: Int?
+
+  /// Human-readable balance line for Settings (micro-USD -> USD).
+  public var balanceDescription: String {
+    let spendable = spendable_remaining_micro_usd ?? remaining_micro_usd
+    if let s = spendable {
+      let usd = Double(s) / 1_000_000.0
+      let period = period.map { " · \($0)" } ?? ""
+      return String(format: "$%.4f remaining%@", usd, period)
+    }
+    return "usage unknown"
+  }
 }
 
 public struct ControlPlaneChatMessage: Codable, Sendable, Equatable {
