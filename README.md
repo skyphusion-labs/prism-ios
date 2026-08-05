@@ -7,66 +7,50 @@
 
 ## What this is
 
-AGPL **iOS client kit** for Prism: shared Swift package (`PrismKit`) that talks to:
+AGPL **iOS client** for Prism:
 
-1. **Playground Worker** (`https://play.skyphusion.org` or self-host) -- public signup/session cookie, `GET /api/models`, `POST /api/chat` + SSE stream.
-2. **Control plane** (`https://play-proxy.skyphusion.org`) -- device enrollment + `Bearer pcp_…` metered chat.
-
-A full Xcode SwiftUI app ships next; this package is the spine.
+1. **`PrismKit`** (Swift package) -- HTTP clients for the playground Worker and commercial control plane.
+2. **`Prism` app** (SwiftUI) -- login / model pick / chat shell against the playground.
 
 ## Layout
 
 ```
-Sources/PrismKit/
-  PrismKit.swift           -- version / package identity
-  Models.swift             -- Codable request/response types
-  HTTPClient.swift         -- URLSession + cookie jar
-  PrismClient.swift        -- playground Worker client
-  ControlPlaneClient.swift -- commercial plane client
-  SSE.swift                -- chat stream parser
-Tests/PrismKitTests/       -- unit + URLProtocol mocks
+Sources/PrismKit/     -- shared package (API client)
+Tests/PrismKitTests/  -- package tests
+App/                  -- SwiftUI application sources
+project.yml           -- XcodeGen project definition
+Prism.xcodeproj/      -- generated iOS app project (open this)
 ```
+
+## Run the app (macOS + Xcode)
+
+```bash
+# regenerate project after project.yml / App/ changes
+xcodegen generate
+
+open Prism.xcodeproj
+# select the Prism scheme, iPhone simulator, Run
+```
+
+Default server: `https://play.skyphusion.org` (public signup). Settings can point at a self-host Worker.
+
+## Package tests
+
+```bash
+swift test
+# or: DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun swift test
+```
+
+CI runs package tests on Ubuntu. The iOS app is built with Xcode locally (not in Linux CI).
 
 ## Status
 
-**Library client: in progress.** Aviation-grade `main`. Next: Keychain storage, SwiftUI shell, StoreKit later.
-
-## Build / test
-
-```bash
-# macOS (Command Line Tools or Xcode)
-swift test
-
-# Prefer full Xcode toolchain if CLI tools miss XCTest:
-# DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun swift test
-```
-
-## Quick use
-
-```swift
-import PrismKit
-
-// Public playground (cookie session after login)
-let play = PrismClient(baseURL: PrismClient.playBaseURL)
-let catalog = try await play.models()
-_ = try await play.login(username: "you", password: "••••••••••")
-let reply = try await play.chat(ChatRequestBody(model: catalog.models[0].model, userInput: "Hello"))
-print(reply.output ?? "")
-
-// Or stream
-let (text, _) = try await play.chatStreamText(
-  ChatRequestBody(model: catalog.models[0].model, userInput: "Hello")
-)
-
-// Commercial plane (device key from enrollment -- store in Keychain)
-let plane = ControlPlaneClient(baseURL: ControlPlaneClient.productionBaseURL)
-// let en = try await plane.enroll(enrollmentToken: "…")
-// plane.setClientKey(en.key)
-// let answer = try await plane.chat(model: "…", user: "Hello")
-```
+- Kit: chat + auth + SSE against playground; control-plane client for `pcp_` keys.
+- App shell: public login/signup, model menu, streaming chat, base URL settings.
+- Next: Keychain for control-plane keys, plane enrollment UX, incremental SSE, StoreKit later.
 
 ## Related
 
 - Playground: https://play.skyphusion.org  
-- Control plane contract: [prism-control-plane/docs/CONTRACT.md](https://github.com/skyphusion-labs/prism-control-plane/blob/main/docs/CONTRACT.md)  
+- Control plane contract: [docs/CONTRACT.md](https://github.com/skyphusion-labs/prism-control-plane/blob/main/docs/CONTRACT.md)  
 - Android: https://github.com/skyphusion-labs/prism-android
