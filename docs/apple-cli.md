@@ -41,26 +41,48 @@ that contains key material. Repo docs only.
 
 ## Team ID (Xcode signing)
 
-Membership → **Team ID** (10 characters), or after auth:
+| Item | Value |
+| --- | --- |
+| Team ID | `858878N47M` (bundle seedId) |
+| In repo | `project.yml` → `DEVELOPMENT_TEAM` |
 
-```bash
-asc bundle-ids list 2>/dev/null | head
-# or: developer.apple.com → Membership details
-```
+After changing `project.yml`: `xcodegen generate`.
 
-Put it in `project.yml` as `DEVELOPMENT_TEAM` when ready, then `xcodegen generate`.
-
-## Prism app identifiers (planned)
+## Prism app identifiers
 
 | Item | Value |
 | --- | --- |
 | Bundle ID | `org.skyphusion.prism` |
+| Bundle resource ID | `4Y2B2UF5QB` |
 | Product name | Prism |
-| IAP (later) | consumable credit packs; product IDs TBD when plane store-receipt is un-parked |
+| SKU (when creating app) | `skyphusion-prism-ios` |
+| IAP capability | enabled on the bundle ID |
 
-Plane contract still parks **receipt enrollment / credit prices** (see
-`prism-control-plane` CONTRACT open decisions). CLI can still create the app,
-bundle ID, and IAP *catalog* in App Store Connect; server redeem stays deferred.
+### Create the App Store Connect *app* (API key cannot CREATE apps)
+
+App Store Connect API keys only allow GET/UPDATE on `apps`. Create once via web session:
+
+```bash
+# interactive Apple ID + password + 2FA (not the API key)
+asc web auth login --apple-id 'you@example.com'
+asc web apps create \
+  --name "Prism" \
+  --bundle-id "org.skyphusion.prism" \
+  --sku "skyphusion-prism-ios" \
+  --platform IOS \
+  --primary-locale en-US
+asc apps list
+```
+
+Then export the numeric app id for later IAP:
+
+```bash
+export ASC_APP_ID="$(asc apps list --output json | jq -r '.data[0].id')"
+asc iap create --app "$ASC_APP_ID" --type CONSUMABLE --ref-name "Credit pack" --product-id "org.skyphusion.prism.credit.5"
+```
+
+Plane contract still parks **receipt enrollment / credit prices**. Catalog IAP can land;
+server redeem stays deferred.
 
 ## Useful commands
 

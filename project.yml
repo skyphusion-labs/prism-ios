@@ -16,6 +16,9 @@ settings:
     SWIFT_VERSION: "5.9"
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
+    # skyphusion Apple Developer Team (bundle seedId)
+    DEVELOPMENT_TEAM: "858878N47M"
+    CODE_SIGN_STYLE: Automatic
 
 targets:
   Prism:
@@ -35,6 +38,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.skyphusion.prism
         PRODUCT_NAME: Prism
+        DEVELOPMENT_TEAM: "858878N47M"
+        CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1,2"
         INFOPLIST_KEY_CFBundleDisplayName: Prism
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
