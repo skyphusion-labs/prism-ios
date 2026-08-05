@@ -162,6 +162,13 @@ final class AppState: ObservableObject {
       URL(string: baseURLString.trimmingCharacters(in: .whitespacesAndNewlines))
       ?? PrismClient.playBaseURL
     playground = PrismClient(baseURL: playURL)
+    // Re-inject Keychain session into the new ephemeral jar (process restart / URL apply).
+    if let token = try? secrets.get(SecretStoreKeys.playgroundSessionCookie), !token.isEmpty {
+      _ = playground.restoreSessionToken(token)
+    }
+    if let who = try? secrets.get(SecretStoreKeys.playgroundSessionUsername), !who.isEmpty {
+      sessionUsername = who
+    }
 
     let planeURL =
       URL(string: controlPlaneURLString.trimmingCharacters(in: .whitespacesAndNewlines))
@@ -181,6 +188,23 @@ final class AppState: ObservableObject {
       planeBalance = nil
       planeClientLabel = nil
     }
+  }
+
+  /// Persist playground session token + username after login/signup.
+  private func persistPlaygroundSession(username: String?) {
+    if let token = playground.exportSessionToken(), !token.isEmpty {
+      try? secrets.set(token, for: SecretStoreKeys.playgroundSessionCookie)
+    }
+    if let username, !username.isEmpty {
+      try? secrets.set(username, for: SecretStoreKeys.playgroundSessionUsername)
+    }
+  }
+
+  /// Drop stored session when logout or cookie no longer accepted.
+  private func clearPersistedPlaygroundSession() {
+    try? secrets.set(nil, for: SecretStoreKeys.playgroundSessionCookie)
+    try? secrets.set(nil, for: SecretStoreKeys.playgroundSessionUsername)
+    playground.clearSession()
   }
 
   func setBackend(_ kind: BackendKind) {
@@ -207,7 +231,14 @@ final class AppState: ObservableObject {
       models = res.models
       authMode = res.mode
       authenticated = res.authenticated == true
-      sessionUsername = res.username
+      if let u = res.username { sessionUsername = u }
+      // Stale Keychain cookie: server says not signed in while we still hold a token.
+      if res.authenticated != true, (try? secrets.get(SecretStoreKeys.playgroundSessionCookie)) != nil {
+        clearPersistedPlaygroundSession()
+      } else if res.authenticated == true {
+        // Keep jar + Keychain in sync if Set-Cookie rotated (rare).
+        persistPlaygroundSession(username: sessionUsername)
+      }
       pickDefaultModel()
       banner = statusBannerPlayground(from: res)
     } catch {
@@ -276,6 +307,7 @@ final class AppState: ObservableObject {
       sessionUsername = res.user?.username ?? username
       authenticated = true
       password = ""
+      persistPlaygroundSession(username: sessionUsername)
       await refreshModels()
     } catch {
       errorMessage = error.localizedDescription
@@ -292,6 +324,7 @@ final class AppState: ObservableObject {
       sessionUsername = res.user?.username ?? username
       authenticated = true
       password = ""
+      persistPlaygroundSession(username: sessionUsername)
       await refreshModels()
     } catch {
       errorMessage = error.localizedDescription
@@ -309,6 +342,7 @@ final class AppState: ObservableObject {
       } catch {
         errorMessage = error.localizedDescription
       }
+      clearPersistedPlaygroundSession()
     }
     authenticated = false
     sessionUsername = nil

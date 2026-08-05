@@ -16,6 +16,9 @@ public enum SecretStoreKeys {
   public static let controlPlaneBaseURL = "org.skyphusion.prism.control-plane.base-url"
   public static let playgroundBaseURL = "org.skyphusion.prism.playground.base-url"
   public static let backendMode = "org.skyphusion.prism.backend-mode"
+  /// Playground session token value (cookie `__Host-prism_session`).
+  public static let playgroundSessionCookie = "org.skyphusion.prism.playground.session-cookie"
+  public static let playgroundSessionUsername = "org.skyphusion.prism.playground.session-username"
 }
 
 /// In-memory store (tests + Linux).

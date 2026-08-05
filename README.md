@@ -45,9 +45,9 @@ CI runs package tests on Ubuntu. The iOS app is built with Xcode locally (not in
 
 ## Status
 
-- Kit 0.3: playground + control-plane OpenAI SSE streams; enroll / `me` / models; Keychain `SecretStore`.
-- App: dual backend, plane enroll + Keychain, token-by-token chat on both playground and plane.
-- Next: StoreKit top-up, optional playground session cookie persistence.
+- Kit 0.3.1: playground + control-plane OpenAI SSE streams; Keychain for plane key **and** playground session cookie.
+- App: dual backend, stay signed-in across launches (session restore), plane enroll, streaming chat.
+- Next: StoreKit top-up.
 
 ## Related
 
