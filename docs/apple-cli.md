@@ -58,31 +58,38 @@ After changing `project.yml`: `xcodegen generate`.
 | SKU (when creating app) | `skyphusion-prism-ios` |
 | IAP capability | enabled on the bundle ID |
 
-### Create the App Store Connect *app* (API key cannot CREATE apps)
+### App (created)
 
-App Store Connect API keys only allow GET/UPDATE on `apps`. Create once via web session:
+| Item | Value |
+| --- | --- |
+| App ID | `6798391677` |
+| ASC name | `Prism - prism` (auto-suffix; plain "Prism" was taken) |
+| SKU | `skyphusion-prism-ios` |
+| Store URL | https://apps.apple.com/us/app/id6798391677 |
+| Content rights | does not use third-party content |
 
 ```bash
-# interactive Apple ID + password + 2FA (not the API key)
-asc web auth login --apple-id 'you@example.com'
-asc web apps create \
-  --name "Prism" \
-  --bundle-id "org.skyphusion.prism" \
-  --sku "skyphusion-prism-ios" \
-  --platform IOS \
-  --primary-locale en-US
+export ASC_APP_ID=6798391677
 asc apps list
+asc iap list --app "$ASC_APP_ID"
 ```
 
-Then export the numeric app id for later IAP:
+Rename in App Store Connect metadata later if you want a cleaner display name.
 
-```bash
-export ASC_APP_ID="$(asc apps list --output json | jq -r '.data[0].id')"
-asc iap create --app "$ASC_APP_ID" --type CONSUMABLE --ref-name "Credit pack" --product-id "org.skyphusion.prism.credit.5"
-```
+### In-app purchases (READY_TO_SUBMIT)
 
-Plane contract still parks **receipt enrollment / credit prices**. Catalog IAP can land;
-server redeem stays deferred.
+Provisional consumable credit packs (USA base price). **Control-plane redeem still deferred**
+(store-receipt path parked on the plane contract). Client product ids are in
+`StoreProducts` / `Configuration.storekit`.
+
+| Product ID | ASC IAP id | USD | State |
+| --- | --- | --- | --- |
+| `org.skyphusion.prism.credit.5` | 6798391977 | 5.00 | READY_TO_SUBMIT |
+| `org.skyphusion.prism.credit.20` | 6798391642 | 20.00 | READY_TO_SUBMIT |
+| `org.skyphusion.prism.credit.50` | 6798392108 | 50.00 | READY_TO_SUBMIT |
+
+Local StoreKit testing: open scheme → Run → Options → StoreKit Configuration →
+`Configuration.storekit`.
 
 ## Useful commands
 

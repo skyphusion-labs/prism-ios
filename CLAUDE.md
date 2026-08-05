@@ -7,8 +7,9 @@ Guidance for agents working in this repository.
 **AGPL iOS client for Prism.** Shared Swift package (`PrismKit`) plus a SwiftUI app shell
 (`App/` + `Prism.xcodeproj`) for login, model pick, and chat against the playground Worker.
 
-**Status:** kit 0.3.1 + app with dual backend, streaming, and Keychain session restore.
-Aviation-grade `main` (PR + CI for the package). Next: StoreKit top-up.
+**Status:** kit 0.3.1 + dual backend, streaming, Keychain session restore. ASC app `6798391677`
++ 3 credit IAPs READY_TO_SUBMIT. Aviation-grade `main`. Next: StoreKit purchase UI; plane
+receipt redeem when contract un-parks it.
 
 ## Related
 
@@ -33,6 +34,7 @@ Aviation-grade `main` (PR + CI for the package). Next: StoreKit top-up.
 - **`SSEParser`** -- playground `{type:delta}` and OpenAI `choices[].delta.content` frames.
 - **`SecretStore` / `KeychainSecretStore`** -- plane device key, playground session cookie, URL prefs (memory store on Linux CI).
 - **Session restore** -- `PrismClient.exportSessionToken` / `restoreSessionToken` for `__Host-prism_session`.
+- **`StoreProducts`** -- ASC credit pack product ids (`org.skyphusion.prism.credit.*`).
 
 ## Commands
 
