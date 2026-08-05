@@ -34,6 +34,10 @@ extension PrismError: LocalizedError {
 public struct ModelEntry: Codable, Sendable, Equatable, Identifiable {
   public var id: String { model }
 
+  /// Model identifier used on chat requests.
+  ///
+  /// Live playground `GET /api/models` publishes this as `id` (not `model`).
+  /// Older fixtures and some self-hosts use `model`. Decode accepts either.
   public let model: String
   public let label: String?
   public let type: String?
@@ -58,6 +62,41 @@ public struct ModelEntry: Codable, Sendable, Equatable, Identifiable {
     self.streaming = streaming
     self.group = group
     self.capabilities = capabilities
+  }
+
+  private enum CodingKeys: String, CodingKey {
+    case model, id, label, type, provider, streaming, group, capabilities
+  }
+
+  public init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    if let m = try c.decodeIfPresent(String.self, forKey: .model), !m.isEmpty {
+      model = m
+    } else if let i = try c.decodeIfPresent(String.self, forKey: .id), !i.isEmpty {
+      model = i
+    } else {
+      throw DecodingError.keyNotFound(
+        CodingKeys.model,
+        .init(codingPath: c.codingPath, debugDescription: "Expected model or id")
+      )
+    }
+    label = try c.decodeIfPresent(String.self, forKey: .label)
+    type = try c.decodeIfPresent(String.self, forKey: .type)
+    provider = try c.decodeIfPresent(String.self, forKey: .provider)
+    streaming = try c.decodeIfPresent(Bool.self, forKey: .streaming)
+    group = try c.decodeIfPresent(String.self, forKey: .group)
+    capabilities = try c.decodeIfPresent([String].self, forKey: .capabilities)
+  }
+
+  public func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    try c.encode(model, forKey: .model)
+    try c.encodeIfPresent(label, forKey: .label)
+    try c.encodeIfPresent(type, forKey: .type)
+    try c.encodeIfPresent(provider, forKey: .provider)
+    try c.encodeIfPresent(streaming, forKey: .streaming)
+    try c.encodeIfPresent(group, forKey: .group)
+    try c.encodeIfPresent(capabilities, forKey: .capabilities)
   }
 }
 

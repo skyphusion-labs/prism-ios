@@ -9,7 +9,7 @@ import FoundationNetworking
 final class PrismKitTests: XCTestCase {
   func testHealthString() {
     XCTAssertEqual(PrismKit.health(), "ok:PrismKit")
-    XCTAssertEqual(PrismKit.version, "0.4.0")
+    XCTAssertEqual(PrismKit.version, "0.4.1")
   }
 
   func testSessionCookieExportRestore() throws {
@@ -158,6 +158,23 @@ final class PrismKitTests: XCTestCase {
     XCTAssertEqual(env.models[0].model, "@cf/meta/llama")
     XCTAssertEqual(env.mode, "public")
     XCTAssertEqual(env.authenticated, false)
+  }
+
+  /// Live playground catalog uses `id` instead of `model` (caught 2026-08-05 smoke).
+  func testModelsResponseDecodeIdField() throws {
+    let json = """
+    {
+      "models": [
+        {"id":"anthropic/claude-fable-5","label":"Claude Fable 5","type":"chat","streaming":true,"provider":"anthropic"}
+      ],
+      "mode":"public",
+      "authenticated":false
+    }
+    """.data(using: .utf8)!
+    let env = try JSONDecoder().decode(ModelsResponse.self, from: json)
+    XCTAssertEqual(env.models[0].model, "anthropic/claude-fable-5")
+    XCTAssertEqual(env.models[0].id, "anthropic/claude-fable-5")
+    XCTAssertEqual(env.models[0].label, "Claude Fable 5")
   }
 
   func testChatRequestEncode() throws {
