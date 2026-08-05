@@ -1,0 +1,70 @@
+{
+  "identifier" : "B1A3F8E0",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "5.00",
+      "familyShareable" : false,
+      "internalID" : "C5",
+      "localizations" : [
+        {
+          "description" : "Prism prepaid credit, 5 USD.",
+          "displayName" : "Credit 5 USD",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "org.skyphusion.prism.credit.5",
+      "referenceName" : "Credit 5 USD",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "20.00",
+      "familyShareable" : false,
+      "internalID" : "C20",
+      "localizations" : [
+        {
+          "description" : "Prism prepaid credit, 20 USD.",
+          "displayName" : "Credit 20 USD",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "org.skyphusion.prism.credit.20",
+      "referenceName" : "Credit 20 USD",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "50.00",
+      "familyShareable" : false,
+      "internalID" : "C50",
+      "localizations" : [
+        {
+          "description" : "Prism prepaid credit, 50 USD.",
+          "displayName" : "Credit 50 USD",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "org.skyphusion.prism.credit.50",
+      "referenceName" : "Credit 50 USD",
+      "type" : "Consumable"
+    }
+  ],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_storeKitErrors" : [
+      {
+        "current" : null,
+        "enabled" : false,
+        "name" : "Load Products"
+      }
+    ]
+  },
+  "subscriptionGroups" : [
+
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

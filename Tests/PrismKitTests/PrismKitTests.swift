@@ -29,6 +29,13 @@ final class PrismKitTests: XCTestCase {
     XCTAssertNil(client.exportSessionToken())
   }
 
+  func testStoreProductsCatalog() {
+    XCTAssertEqual(StoreProducts.appStoreConnectAppId, "6798391677")
+    XCTAssertEqual(StoreProducts.allCreditPacks.count, 3)
+    XCTAssertTrue(StoreProducts.allCreditPacks.contains(StoreProducts.credit5))
+    XCTAssertEqual(StoreProducts.packs.map(\.creditUSD), [5, 20, 50])
+  }
+
   func testOpenAISSEParserDeltas() {
     let raw = """
     data: {"choices":[{"delta":{"role":"assistant"}}]}

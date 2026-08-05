@@ -7,8 +7,9 @@ Guidance for agents working in this repository.
 **AGPL iOS client for Prism.** Shared Swift package (`PrismKit`) plus a SwiftUI app shell
 (`App/` + `Prism.xcodeproj`) for login, model pick, and chat against the playground Worker.
 
-**Status:** kit 0.3.1 + app with dual backend, streaming, and Keychain session restore.
-Aviation-grade `main` (PR + CI for the package). Next: StoreKit top-up.
+**Status:** kit 0.3.1 + dual backend, streaming, Keychain session restore. ASC app `6798391677`
++ 3 credit IAPs READY_TO_SUBMIT. Aviation-grade `main`. Next: StoreKit purchase UI; plane
+receipt redeem when contract un-parks it.
 
 ## Related
 
@@ -33,6 +34,7 @@ Aviation-grade `main` (PR + CI for the package). Next: StoreKit top-up.
 - **`SSEParser`** -- playground `{type:delta}` and OpenAI `choices[].delta.content` frames.
 - **`SecretStore` / `KeychainSecretStore`** -- plane device key, playground session cookie, URL prefs (memory store on Linux CI).
 - **Session restore** -- `PrismClient.exportSessionToken` / `restoreSessionToken` for `__Host-prism_session`.
+- **`StoreProducts`** -- ASC credit pack product ids (`org.skyphusion.prism.credit.*`).
 
 ## Commands
 
@@ -41,6 +43,20 @@ swift test                 # package tests (CI)
 xcodegen generate          # refresh Prism.xcodeproj from project.yml
 xcodebuild -scheme Prism -destination 'generic/platform=iOS Simulator' build
 ```
+
+## Apple Developer / App Store Connect (CLI)
+
+Use **`asc`** (`brew install asc`), not the dashboard, once an API key is registered:
+
+```bash
+asc auth login --name skyphusion --key-id … --issuer-id … --private-key ~/.config/skyphusion/AuthKey_….p8 --network
+asc auth status
+asc apps list
+```
+
+Setup steps: `docs/apple-cli.md`. Command catalog: `docs/ASC.md`. Credentials live in
+macOS keychain (or `chmod 600` env under `~/.config/skyphusion/`); never in the repo.
+Plane store-receipt / commercial pricing remain deferred on the control-plane contract.
 
 ## CI
 
