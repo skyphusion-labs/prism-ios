@@ -9,7 +9,7 @@ import FoundationNetworking
 final class PrismKitTests: XCTestCase {
   func testHealthString() {
     XCTAssertEqual(PrismKit.health(), "ok:PrismKit")
-    XCTAssertEqual(PrismKit.version, "0.5.0")
+    XCTAssertEqual(PrismKit.version, "0.5.1")
   }
 
   func testSessionCookieExportRestore() throws {
@@ -40,6 +40,21 @@ final class PrismKitTests: XCTestCase {
     let json = #"{"created":1,"model":"m","data":[{"b64_json":"abc123"}]}"#.data(using: .utf8)!
     let res = try JSONDecoder().decode(ImageGenerationResponse.self, from: json)
     XCTAssertEqual(res.firstBase64, "abc123")
+  }
+
+  func testImageGenerationResponseURLInB64Field() throws {
+    // Legacy plane bug: https URL stuffed into b64_json
+    let url = "https://cdn.example/out.png"
+    let json = #"{"created":1,"model":"m","data":[{"b64_json":"\#(url)"}]}"#.data(using: .utf8)!
+    let res = try JSONDecoder().decode(ImageGenerationResponse.self, from: json)
+    XCTAssertNil(res.firstBase64)
+    XCTAssertEqual(res.firstDisplayURL, url)
+  }
+
+  func testImageGenerationResponseExplicitURL() throws {
+    let json = #"{"created":1,"model":"m","data":[{"url":"https://cdn.example/a.png"}]}"#.data(using: .utf8)!
+    let res = try JSONDecoder().decode(ImageGenerationResponse.self, from: json)
+    XCTAssertEqual(res.firstDisplayURL, "https://cdn.example/a.png")
   }
 
   func testVideoGenerationResponseDecode() throws {

@@ -174,8 +174,8 @@ public final class ControlPlaneClient: @unchecked Sendable {
 
   // MARK: - Image / video (unit-priced)
 
-  /// Long-running non-chat doors; default 5 minutes (plane UPSTREAM_TIMEOUT often 60s, but UB can lag).
-  public static let nonChatTimeout: TimeInterval = 300
+  /// Long-running non-chat doors; client wait above plane's nonchat ceiling (180s).
+  public static let nonChatTimeout: TimeInterval = 200
 
   /// `POST /v1/images/generations` -- returns `data[].b64_json`.
   public func generateImage(_ body: ImageGenerationRequest) async throws -> ImageGenerationResponse {
@@ -190,7 +190,7 @@ public final class ControlPlaneClient: @unchecked Sendable {
     if let err = res.error {
       throw PrismError.serverError(err.message ?? err.code ?? "image generation error")
     }
-    guard res.firstBase64 != nil || res.data?.first?.url != nil else {
+    guard res.firstBase64 != nil || res.firstDisplayURL != nil else {
       throw PrismError.serverError("Empty image payload")
     }
     return res
