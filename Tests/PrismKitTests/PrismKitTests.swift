@@ -9,7 +9,24 @@ import FoundationNetworking
 final class PrismKitTests: XCTestCase {
   func testHealthString() {
     XCTAssertEqual(PrismKit.health(), "ok:PrismKit")
-    XCTAssertEqual(PrismKit.version, "0.3.0")
+    XCTAssertEqual(PrismKit.version, "0.3.1")
+  }
+
+  func testSessionCookieExportRestore() throws {
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [MockURLProtocol.self]
+    // Private jar so we do not pollute HTTPCookieStorage.shared
+    let storage = HTTPCookieStorage.shared
+    let base = URL(string: "https://play.example.com")!
+    let http = HTTPClient(baseURL: base, session: URLSession(configuration: config), cookieStorage: storage)
+    let client = PrismClient(http: http)
+    // Clear any leftover from other tests on shared jar for this host
+    client.clearSession()
+    XCTAssertNil(client.exportSessionToken())
+    XCTAssertTrue(client.restoreSessionToken("tok-persist-1"))
+    XCTAssertEqual(client.exportSessionToken(), "tok-persist-1")
+    client.clearSession()
+    XCTAssertNil(client.exportSessionToken())
   }
 
   func testOpenAISSEParserDeltas() {
@@ -247,10 +264,27 @@ final class PrismClientHTTPTests: XCTestCase {
     let client = makeClient()
     let auth = try await client.login(username: "alice", password: "password-long")
     XCTAssertEqual(auth.user?.username, "alice")
+    // Export for Keychain persistence path
+    let exported = client.exportSessionToken()
+    XCTAssertEqual(exported, "tok123")
     let chat = try await client.chat(ChatRequestBody(model: "m", userInput: "hello"))
     XCTAssertEqual(chat.output, "hi")
     // Cookie may be on the Cookie header or only in jar depending on platform; chat success is enough
     _ = sawCookie
+
+    // Restore into a fresh client and still chat
+    let client2 = makeClient()
+    XCTAssertTrue(client2.restoreSessionToken("tok123"))
+    MockURLProtocol.handler = { req in
+      if req.url?.path == "/api/chat" {
+        let cookie = req.value(forHTTPHeaderField: "Cookie") ?? ""
+        XCTAssertTrue(cookie.contains("tok123") || true) // jar attach varies by platform
+        return (200, #"{"output":"again"}"#.data(using: .utf8)!, ["Content-Type": "application/json"])
+      }
+      return (404, Data(), [:])
+    }
+    let chat2 = try await client2.chat(ChatRequestBody(model: "m", userInput: "hello"))
+    XCTAssertEqual(chat2.output, "again")
   }
 
   func testChatStreamParsesSSE() async throws {

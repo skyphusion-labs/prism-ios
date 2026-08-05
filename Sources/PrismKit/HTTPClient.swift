@@ -165,6 +165,41 @@ public final class HTTPClient: @unchecked Sendable {
     }
     return e.error ?? e.message
   }
+
+  // MARK: - Cookie jar helpers (playground session)
+
+  /// Value of a named cookie for `baseURL`, if present in the jar.
+  public func cookieValue(named name: String) -> String? {
+    guard let cookies = cookieStorage.cookies(for: baseURL) else { return nil }
+    return cookies.first(where: { $0.name == name })?.value
+  }
+
+  /// Inject a host-only Secure cookie (suitable for `__Host-…` session cookies).
+  @discardableResult
+  public func setCookie(name: String, value: String, path: String = "/") -> Bool {
+    let props: [HTTPCookiePropertyKey: Any] = [
+      .name: name,
+      .value: value,
+      .path: path,
+      .secure: "TRUE",
+      .originURL: baseURL,
+    ]
+    // __Host- cookies must not set Domain; host-only via originURL.
+    guard let cookie = HTTPCookie(properties: props) else { return false }
+    cookieStorage.setCookie(cookie)
+    return true
+  }
+
+  /// Drop cookies for `baseURL` (or all in this jar when `forBase` is false).
+  public func clearCookies(forBaseOnly: Bool = true) {
+    if forBaseOnly, let cookies = cookieStorage.cookies(for: baseURL) {
+      for c in cookies { cookieStorage.deleteCookie(c) }
+      return
+    }
+    if let all = cookieStorage.cookies {
+      for c in all { cookieStorage.deleteCookie(c) }
+    }
+  }
 }
 
 /// Type-erased Encodable for optional request bodies.

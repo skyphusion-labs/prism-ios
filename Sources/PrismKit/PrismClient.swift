@@ -8,7 +8,8 @@ import FoundationNetworking
 ///
 /// Public mode (`AUTH_MODE=public`) uses an httpOnly session cookie
 /// (`__Host-prism_session`). This client keeps an in-memory cookie jar and
-/// replays `Set-Cookie` from login/signup.
+/// replays `Set-Cookie` from login/signup. The app may persist the token via
+/// ``exportSessionToken`` / ``restoreSessionToken`` (Keychain).
 ///
 /// Access mode (self-host behind CF Access) needs Access headers on every call;
 /// pass them via `defaultHeaders` (e.g. service-token headers for automation).
@@ -19,6 +20,9 @@ public final class PrismClient: @unchecked Sendable {
   /// Hosted public playground.
   public static let playBaseURL = URL(string: "https://play.skyphusion.org")!
 
+  /// Cookie name set by the playground Worker (`src/session.ts`).
+  public static let sessionCookieName = "__Host-prism_session"
+
   public init(baseURL: URL = PrismClient.playBaseURL, defaultHeaders: [String: String] = [:]) {
     self.http = HTTPClient(baseURL: baseURL)
     self.defaultHeaders = defaultHeaders
@@ -28,6 +32,26 @@ public final class PrismClient: @unchecked Sendable {
   public init(http: HTTPClient, defaultHeaders: [String: String] = [:]) {
     self.http = http
     self.defaultHeaders = defaultHeaders
+  }
+
+  // MARK: - Session cookie
+
+  /// Current session token from the jar (after login or restore), if any.
+  public func exportSessionToken() -> String? {
+    http.cookieValue(named: Self.sessionCookieName)
+  }
+
+  /// Re-inject a previously stored session token into the jar.
+  @discardableResult
+  public func restoreSessionToken(_ token: String) -> Bool {
+    let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return false }
+    return http.setCookie(name: Self.sessionCookieName, value: trimmed)
+  }
+
+  /// Drop session cookies for this base URL.
+  public func clearSession() {
+    http.clearCookies(forBaseOnly: true)
   }
 
   // MARK: - Health / catalog
