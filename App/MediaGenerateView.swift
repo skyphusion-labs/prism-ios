@@ -86,11 +86,7 @@ struct MediaGenerateView: View {
         } header: {
           Text("Prompt")
         } footer: {
-          Text(
-            kind == .image
-              ? "POST /v1/images/generations. Prefer xai/ image models; some @cf/ models need different input shapes upstream."
-              : "POST /v1/videos/generations. Long-running; may time out if the plane UPSTREAM_TIMEOUT is short. Optional image enables i2v."
-          )
+          Text(kind == .image ? imageFooter : videoFooter)
         }
 
         if let status = state.mediaStatus {
@@ -162,6 +158,18 @@ struct MediaGenerateView: View {
     case .image: return $state.imagePrompt
     case .video: return $state.videoPrompt
     }
+  }
+
+  private var imageFooter: String {
+    "POST /v1/images/generations. Prefer xai/ image models; some @cf/ models need different input shapes upstream."
+  }
+
+  private var videoFooter: String {
+    let mid = state.selectedVideoModelId ?? ""
+    if mid.hasPrefix("minimax/hailuo") {
+      return "Hailuo is image-to-video only: paste an https image URL or data: URI above. For text-only, pick Seedance, Grok video, or Veo."
+    }
+    return "POST /v1/videos/generations. Prefer Seedance for t2v. Long-running (often 1–2 min). Optional image enables i2v where supported."
   }
 
   #if canImport(UIKit)

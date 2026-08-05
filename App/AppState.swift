@@ -319,7 +319,12 @@ final class AppState: ObservableObject {
         ?? imageModels.first?.model
     }
     if selectedVideoModelId == nil || !videoModels.contains(where: { $0.model == selectedVideoModelId }) {
-      selectedVideoModelId = videoModels.first?.model
+      // Prefer true text-to-video models. Hailuo is i2v-only on CF (needs first frame).
+      selectedVideoModelId = videoModels.first(where: { $0.model.hasPrefix("bytedance/seedance") })?.model
+        ?? videoModels.first(where: { $0.model.hasPrefix("xai/grok-imagine-video") })?.model
+        ?? videoModels.first(where: { $0.model.hasPrefix("google/veo") })?.model
+        ?? videoModels.first(where: { !$0.model.hasPrefix("minimax/hailuo") })?.model
+        ?? videoModels.first?.model
     }
   }
 
