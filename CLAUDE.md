@@ -17,8 +17,8 @@ Bearer auth client, chat + stream against the public or self-hosted Prism API.
 | Repo | Role |
 | --- | --- |
 | [prism](https://github.com/skyphusion-labs/prism) | Inference playground Worker (`play.skyphusion.org`) |
-| [prism-control-plane](https://github.com/skyphusion-labs/prism-control-plane) | Commercial multi-tenant control plane (skeleton) |
-| [prism-android](https://github.com/skyphusion-labs/prism-android) | Sibling Android kit (skeleton) |
+| [prism-control-plane](https://github.com/skyphusion-labs/prism-control-plane) | Commercial multi-tenant control plane (live control plane; this client is still a skeleton kit) |
+| [prism-android](https://github.com/skyphusion-labs/prism-android) | Sibling Android kit (live control plane; this client is still a skeleton kit) |
 
 ## Layout
 
