@@ -122,7 +122,15 @@ final class AppState: ObservableObject {
   }
 
   var videoModels: [ModelEntry] {
-    models.filter { ($0.type ?? "") == "video" }
+    // Grok video currently CF-7003s on this plane; keep it listed but last.
+    models
+      .filter { ($0.type ?? "") == "video" }
+      .sorted { a, b in
+        let ag = a.model.hasPrefix("xai/grok-imagine-video")
+        let bg = b.model.hasPrefix("xai/grok-imagine-video")
+        if ag != bg { return !ag && bg }
+        return (a.label ?? a.model) < (b.label ?? b.model)
+      }
   }
 
   var selectedModel: ModelEntry? {
