@@ -344,7 +344,10 @@ public struct ImageGenerationRequest: Codable, Sendable, Equatable {
   }
 }
 
-/// OpenAI-ish image envelope; plane returns `data[].b64_json`.
+/// OpenAI-ish image envelope; plane returns `data[].b64_json` and/or `data[].url`.
+///
+/// Note: older plane builds mis-filed https URLs into `b64_json`. Clients should use
+/// ``firstDisplayURL`` / ``firstBase64`` helpers which tolerate that.
 public struct ImageGenerationResponse: Codable, Sendable, Equatable {
   public let created: Int?
   public let model: String?
@@ -356,9 +359,26 @@ public struct ImageGenerationResponse: Codable, Sendable, Equatable {
     public let url: String?
   }
 
-  /// First image payload as raw base64 (no data-URL prefix).
+  /// First image as raw base64 when the field is real base64 (not an https URL).
   public var firstBase64: String? {
-    data?.first?.b64_json
+    guard let raw = data?.first?.b64_json, !raw.isEmpty else { return nil }
+    if raw.hasPrefix("http://") || raw.hasPrefix("https://") { return nil }
+    if raw.hasPrefix("data:image/") {
+      if let r = raw.range(of: "base64,") {
+        return String(raw[r.upperBound...])
+      }
+    }
+    return raw
+  }
+
+  /// First image URL (explicit `url` or legacy URL stuffed into `b64_json`).
+  public var firstDisplayURL: String? {
+    if let u = data?.first?.url, !u.isEmpty { return u }
+    if let raw = data?.first?.b64_json,
+       raw.hasPrefix("http://") || raw.hasPrefix("https://") {
+      return raw
+    }
+    return nil
   }
 }
 

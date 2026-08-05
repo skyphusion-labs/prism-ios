@@ -83,6 +83,7 @@ final class AppState: ObservableObject {
 
   @Published var imagePrompt: String = ""
   @Published var lastImageBase64: String?
+  @Published var lastImageURL: String?
   @Published var lastImageModel: String?
   @Published var videoPrompt: String = ""
   /// Optional i2v still: data URL or https URL.
@@ -129,11 +130,18 @@ final class AppState: ObservableObject {
   }
 
   var selectedImageModel: ModelEntry? {
-    imageModels.first { $0.model == selectedImageModelId } ?? imageModels.first
+    // Do not silently fall back to first model when picker id is stale (wrong model bug).
+    if let id = selectedImageModelId, let m = imageModels.first(where: { $0.model == id }) {
+      return m
+    }
+    return imageModels.first
   }
 
   var selectedVideoModel: ModelEntry? {
-    videoModels.first { $0.model == selectedVideoModelId } ?? videoModels.first
+    if let id = selectedVideoModelId, let m = videoModels.first(where: { $0.model == id }) {
+      return m
+    }
+    return videoModels.first
   }
 
   /// Image/video doors are control-plane only.
@@ -314,12 +322,18 @@ final class AppState: ObservableObject {
         ?? chatModels.first?.model
     }
     if selectedImageModelId == nil || !imageModels.contains(where: { $0.model == selectedImageModelId }) {
-      // Prefer models known to return b64 on this plane (UB image); fall back to first.
-      selectedImageModelId = imageModels.first(where: { $0.model.hasPrefix("xai/") })?.model
+      selectedImageModelId = imageModels.first(where: { $0.model.contains("flux-1-schnell") })?.model
+        ?? imageModels.first(where: { $0.model.hasPrefix("xai/") })?.model
         ?? imageModels.first?.model
     }
     if selectedVideoModelId == nil || !videoModels.contains(where: { $0.model == selectedVideoModelId }) {
-      selectedVideoModelId = videoModels.first?.model
+      selectedVideoModelId = videoModels.first(where: { $0.model == "google/veo-3.1-fast" })?.model
+        ?? videoModels.first(where: { $0.model.hasPrefix("google/veo") })?.model
+        ?? videoModels.first(where: { $0.model == "bytedance/seedance-2.0-fast" })?.model
+        ?? videoModels.first(where: {
+          !$0.model.hasPrefix("minimax/hailuo") && !$0.model.hasPrefix("xai/grok-imagine-video")
+        })?.model
+        ?? videoModels.first?.model
     }
   }
 
@@ -611,13 +625,20 @@ final class AppState: ObservableObject {
     }
     mediaBusy = true
     mediaError = nil
-    mediaStatus = "Generating…"
+    mediaStatus = "Generating \(model.model)…"
     lastImageBase64 = nil
+    lastImageURL = nil
     defer { mediaBusy = false }
     do {
       let res = try await controlPlane.generateImage(model: model.model, prompt: prompt)
       lastImageBase64 = res.firstBase64
+      lastImageURL = res.firstDisplayURL
       lastImageModel = res.model ?? model.model
+      if lastImageBase64 == nil, lastImageURL == nil {
+        mediaError = "No image bytes or URL in response for \(lastImageModel ?? model.model)."
+        mediaStatus = nil
+        return
+      }
       mediaStatus = "Done · \(lastImageModel ?? model.model)"
       await refreshPlaneBalanceOnly()
     } catch {
@@ -643,7 +664,7 @@ final class AppState: ObservableObject {
     }
     mediaBusy = true
     mediaError = nil
-    mediaStatus = "Generating video (can take minutes)…"
+    mediaStatus = "Generating \(model.model) (often 1–3 min)…"
     lastVideoURL = nil
     defer { mediaBusy = false }
     do {

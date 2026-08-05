@@ -42,10 +42,17 @@ struct MediaGenerateView: View {
         }
 
         Section {
-          Picker("Model", selection: bindingForModel) {
+          // Non-optional tags: Optional tags silently desync and fall back to first model (Veo).
+          Picker("Model", selection: nonOptionalModelBinding) {
             ForEach(modelsForKind) { m in
-              Text(m.label ?? m.model).tag(Optional(m.model))
+              Text(shortLabel(m)).tag(m.model)
             }
+          }
+          if let id = currentModelId {
+            Text(id)
+              .font(.caption2)
+              .foregroundStyle(.secondary)
+              .textSelection(.enabled)
           }
           if modelsForKind.isEmpty, state.canUseMediaDoors {
             Text("No \(kind.title.lowercased()) models in catalog. Refresh models in Settings.")
@@ -86,11 +93,7 @@ struct MediaGenerateView: View {
         } header: {
           Text("Prompt")
         } footer: {
-          Text(
-            kind == .image
-              ? "POST /v1/images/generations. Prefer xai/ image models; some @cf/ models need different input shapes upstream."
-              : "POST /v1/videos/generations. Long-running; may time out if the plane UPSTREAM_TIMEOUT is short. Optional image enables i2v."
-          )
+          Text(kind == .image ? imageFooter : videoFooter)
         }
 
         if let status = state.mediaStatus {
@@ -104,13 +107,36 @@ struct MediaGenerateView: View {
           }
         }
 
-        if kind == .image, let b64 = state.lastImageBase64, let uiImage = decodeImage(b64) {
+        if kind == .image, state.lastImageBase64 != nil || state.lastImageURL != nil {
           Section {
-            Image(uiImage: uiImage)
-              .resizable()
-              .scaledToFit()
-              .frame(maxHeight: 360)
-              .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            if let b64 = state.lastImageBase64, let uiImage = decodeImage(b64) {
+              Image(uiImage: uiImage)
+                .resizable()
+                .scaledToFit()
+                .frame(maxHeight: 360)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            } else if let urlStr = state.lastImageURL, let url = URL(string: urlStr) {
+              AsyncImage(url: url) { phase in
+                switch phase {
+                case .success(let img):
+                  img.resizable().scaledToFit().frame(maxHeight: 360)
+                case .failure:
+                  Link("Open image URL", destination: url)
+                case .empty:
+                  ProgressView()
+                @unknown default:
+                  EmptyView()
+                }
+              }
+              Text(urlStr)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+            } else {
+              Text("Image payload present but could not render (not base64 and no URL).")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
             if let model = state.lastImageModel {
               Text(model).font(.caption2).foregroundStyle(.secondary)
             }
@@ -148,12 +174,22 @@ struct MediaGenerateView: View {
     kind == .image ? state.imageModels : state.videoModels
   }
 
-  private var bindingForModel: Binding<String?> {
+  private var currentModelId: String? {
+    kind == .image ? state.selectedImageModelId : state.selectedVideoModelId
+  }
+
+  private var nonOptionalModelBinding: Binding<String> {
     switch kind {
     case .image:
-      return $state.selectedImageModelId
+      return Binding(
+        get: { state.selectedImageModelId ?? state.imageModels.first?.model ?? "" },
+        set: { state.selectedImageModelId = $0.isEmpty ? nil : $0 }
+      )
     case .video:
-      return $state.selectedVideoModelId
+      return Binding(
+        get: { state.selectedVideoModelId ?? state.videoModels.first?.model ?? "" },
+        set: { state.selectedVideoModelId = $0.isEmpty ? nil : $0 }
+      )
     }
   }
 
@@ -162,6 +198,25 @@ struct MediaGenerateView: View {
     case .image: return $state.imagePrompt
     case .video: return $state.videoPrompt
     }
+  }
+
+  private func shortLabel(_ m: ModelEntry) -> String {
+    m.label ?? m.model
+  }
+
+  private var imageFooter: String {
+    "POST /v1/images/generations. Many models return a URL (shown below); Flux returns inline base64. Prefer flux-1-schnell if decode fails."
+  }
+
+  private var videoFooter: String {
+    let mid = state.selectedVideoModelId ?? ""
+    if mid.hasPrefix("minimax/hailuo") {
+      return "Hailuo is image-to-video only: paste an https image URL above. For text-only use Veo or Seedance Fast."
+    }
+    if mid.hasPrefix("xai/grok-imagine-video") {
+      return "Grok video still returns CF 7003 on this plane. Prefer google/veo-3.1-fast or bytedance/seedance-2.0-fast."
+    }
+    return "POST /v1/videos/generations. Veo and Seedance Fast are most reliable. Full Seedance may take up to ~3 min."
   }
 
   #if canImport(UIKit)
