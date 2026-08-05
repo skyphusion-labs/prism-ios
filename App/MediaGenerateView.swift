@@ -66,6 +66,13 @@ struct MediaGenerateView: View {
         Section {
           TextField(kind == .image ? "Image prompt" : "Video prompt", text: promptBinding, axis: .vertical)
             .lineLimit(3...8)
+          // Only show image ref for models that accept it (i2i dual / required). Pure t2i hides the field.
+          if kind == .image, selectedImageAcceptsRef {
+            TextField(imageRefPlaceholder, text: $state.imageImageRef, axis: .vertical)
+              .lineLimit(2...4)
+              .textInputAutocapitalization(.never)
+              .autocorrectionDisabled()
+          }
           if kind == .video {
             TextField("Optional image URL or data:… (i2v)", text: $state.videoImageRef, axis: .vertical)
               .lineLimit(2...4)
@@ -201,11 +208,37 @@ struct MediaGenerateView: View {
   }
 
   private func shortLabel(_ m: ModelEntry) -> String {
-    m.label ?? m.model
+    let base = m.label ?? m.model
+    let caps = m.capabilities ?? []
+    if caps.contains("image-input-required") { return "\(base) · i2i only" }
+    if caps.contains("image-input"), (m.type == "image" || kind == .image) {
+      return "\(base) · i2i / +ref"
+    }
+    return base
+  }
+
+  private var selectedImageAcceptsRef: Bool {
+    let caps = state.selectedImageModel?.capabilities ?? []
+    return caps.contains("image-input") || caps.contains("image-input-required")
+  }
+
+  private var imageRefPlaceholder: String {
+    let caps = state.selectedImageModel?.capabilities ?? []
+    if caps.contains("image-input-required") {
+      return "Required reference image URL or data:… (i2i)"
+    }
+    return "Reference image URL or data:… (i2i / edit / multi-ref)"
   }
 
   private var imageFooter: String {
-    "POST /v1/images/generations. Many models return a URL (shown below); Flux returns inline base64. Prefer flux-1-schnell if decode fails."
+    let caps = state.selectedImageModel?.capabilities ?? []
+    if caps.contains("image-input-required") {
+      return "This model is image-to-image only. Paste an https or data: reference above."
+    }
+    if caps.contains("image-input") {
+      return "Dual-mode: works from prompt alone, or paste a reference for i2i/edit (Flux 2 multi-ref, nano-banana, gpt-image, Grok image). Prefer data: for Flux 2."
+    }
+    return "Pure text-to-image. Switch to a · i2i / +ref model to condition on a reference image."
   }
 
   private var videoFooter: String {

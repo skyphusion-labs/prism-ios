@@ -82,6 +82,8 @@ final class AppState: ObservableObject {
   // MARK: - Image / video (control plane)
 
   @Published var imagePrompt: String = ""
+  /// Optional reference image (https or data:) for i2i / edit models.
+  @Published var imageImageRef: String = ""
   @Published var lastImageBase64: String?
   @Published var lastImageURL: String?
   @Published var lastImageModel: String?
@@ -118,11 +120,36 @@ final class AppState: ObservableObject {
   }
 
   var imageModels: [ModelEntry] {
-    models.filter { ($0.type ?? "") == "image" }
+    // Pure t2i first (prompt-only), then dual i2i (+ref), then i2i-required.
+    // Many catalog image models are dual-mode (Flux 2, nano-banana, gpt-image, Grok image).
+    models
+      .filter { ($0.type ?? "") == "image" }
+      .sorted { a, b in
+        let ar = imageRefRank(a)
+        let br = imageRefRank(b)
+        if ar != br { return ar < br }
+        return (a.label ?? a.model) < (b.label ?? b.model)
+      }
+  }
+
+  /// 0 = pure t2i, 1 = optional ref (i2i dual), 2 = ref required.
+  private func imageRefRank(_ m: ModelEntry) -> Int {
+    let caps = m.capabilities ?? []
+    if caps.contains("image-input-required") { return 2 }
+    if caps.contains("image-input") { return 1 }
+    return 0
   }
 
   var videoModels: [ModelEntry] {
-    models.filter { ($0.type ?? "") == "video" }
+    // Grok video currently CF-7003s on this plane; keep it listed but last.
+    models
+      .filter { ($0.type ?? "") == "video" }
+      .sorted { a, b in
+        let ag = a.model.hasPrefix("xai/grok-imagine-video")
+        let bg = b.model.hasPrefix("xai/grok-imagine-video")
+        if ag != bg { return !ag && bg }
+        return (a.label ?? a.model) < (b.label ?? b.model)
+      }
   }
 
   var selectedModel: ModelEntry? {
@@ -322,8 +349,11 @@ final class AppState: ObservableObject {
         ?? chatModels.first?.model
     }
     if selectedImageModelId == nil || !imageModels.contains(where: { $0.model == selectedImageModelId }) {
+      // Prefer pure t2i for first run (flux-1-schnell); list is already pure-t2i first.
       selectedImageModelId = imageModels.first(where: { $0.model.contains("flux-1-schnell") })?.model
-        ?? imageModels.first(where: { $0.model.hasPrefix("xai/") })?.model
+        ?? imageModels.first(where: {
+          !($0.capabilities ?? []).contains("image-input")
+        })?.model
         ?? imageModels.first?.model
     }
     if selectedVideoModelId == nil || !videoModels.contains(where: { $0.model == selectedVideoModelId }) {
@@ -629,8 +659,18 @@ final class AppState: ObservableObject {
     lastImageBase64 = nil
     lastImageURL = nil
     defer { mediaBusy = false }
+    let imageRef = imageImageRef.trimmingCharacters(in: .whitespacesAndNewlines)
+    let caps = model.capabilities ?? []
+    if caps.contains("image-input-required"), imageRef.isEmpty {
+      mediaError = "This model requires a reference image (i2i). Paste an https or data: URL."
+      return
+    }
     do {
-      let res = try await controlPlane.generateImage(model: model.model, prompt: prompt)
+      let res = try await controlPlane.generateImage(
+        model: model.model,
+        prompt: prompt,
+        image: imageRef.isEmpty ? nil : imageRef
+      )
       lastImageBase64 = res.firstBase64
       lastImageURL = res.firstDisplayURL
       lastImageModel = res.model ?? model.model

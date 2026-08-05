@@ -196,8 +196,8 @@ public final class ControlPlaneClient: @unchecked Sendable {
     return res
   }
 
-  public func generateImage(model: String, prompt: String) async throws -> ImageGenerationResponse {
-    try await generateImage(ImageGenerationRequest(model: model, prompt: prompt))
+  public func generateImage(model: String, prompt: String, image: String? = nil) async throws -> ImageGenerationResponse {
+    try await generateImage(ImageGenerationRequest(model: model, prompt: prompt, image: image))
   }
 
   /// `POST /v1/videos/generations` -- `video` is a URL or inline asset.
