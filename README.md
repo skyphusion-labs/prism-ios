@@ -54,6 +54,7 @@ CI runs package tests on Ubuntu. The iOS app is built with Xcode locally (not in
 - App: dual backend, stay signed-in across launches (session restore), plane enroll, streaming chat.
 - App Store Connect: app `6798391677`, three consumable credit IAPs READY_TO_SUBMIT.
 - App Settings top-up: StoreKit 2 purchase UI (local via `Configuration.storekit`); plane receipt redeem deferred.
+- Control plane Image + Video tabs: `POST /v1/images/generations` + `/v1/videos/generations` (kit 0.5).
 - Next: plane receipt redeem when contract un-parks it.
 
 ## Related

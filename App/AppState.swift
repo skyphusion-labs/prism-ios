@@ -68,6 +68,8 @@ final class AppState: ObservableObject {
 
   @Published var models: [ModelEntry] = []
   @Published var selectedModelId: String?
+  @Published var selectedImageModelId: String?
+  @Published var selectedVideoModelId: String?
   @Published var authMode: String?
 
   // MARK: - Chat
@@ -76,6 +78,20 @@ final class AppState: ObservableObject {
   @Published var draft: String = ""
   @Published var conversationId: String?
   @Published var useStream: Bool = true
+
+  // MARK: - Image / video (control plane)
+
+  @Published var imagePrompt: String = ""
+  @Published var lastImageBase64: String?
+  @Published var lastImageModel: String?
+  @Published var videoPrompt: String = ""
+  /// Optional i2v still: data URL or https URL.
+  @Published var videoImageRef: String = ""
+  @Published var lastVideoURL: String?
+  @Published var lastVideoModel: String?
+  @Published var mediaBusy: Bool = false
+  @Published var mediaError: String?
+  @Published var mediaStatus: String?
 
   // MARK: - UI chrome
 
@@ -100,8 +116,29 @@ final class AppState: ObservableObject {
     models.filter { ($0.type ?? "chat") == "chat" }
   }
 
+  var imageModels: [ModelEntry] {
+    models.filter { ($0.type ?? "") == "image" }
+  }
+
+  var videoModels: [ModelEntry] {
+    models.filter { ($0.type ?? "") == "video" }
+  }
+
   var selectedModel: ModelEntry? {
     chatModels.first { $0.model == selectedModelId } ?? chatModels.first
+  }
+
+  var selectedImageModel: ModelEntry? {
+    imageModels.first { $0.model == selectedImageModelId } ?? imageModels.first
+  }
+
+  var selectedVideoModel: ModelEntry? {
+    videoModels.first { $0.model == selectedVideoModelId } ?? videoModels.first
+  }
+
+  /// Image/video doors are control-plane only.
+  var canUseMediaDoors: Bool {
+    backend == .controlPlane && deviceKeyPresent
   }
 
   /// True when the current backend can chat (signed-in playground, or plane with key).
@@ -275,6 +312,14 @@ final class AppState: ObservableObject {
     if selectedModelId == nil || !chatModels.contains(where: { $0.model == selectedModelId }) {
       selectedModelId = chatModels.first(where: { $0.streaming == true })?.model
         ?? chatModels.first?.model
+    }
+    if selectedImageModelId == nil || !imageModels.contains(where: { $0.model == selectedImageModelId }) {
+      // Prefer models known to return b64 on this plane (UB image); fall back to first.
+      selectedImageModelId = imageModels.first(where: { $0.model.hasPrefix("xai/") })?.model
+        ?? imageModels.first?.model
+    }
+    if selectedVideoModelId == nil || !videoModels.contains(where: { $0.model == selectedVideoModelId }) {
+      selectedVideoModelId = videoModels.first?.model
     }
   }
 
@@ -546,5 +591,82 @@ final class AppState: ObservableObject {
   func clearChat() {
     turns = []
     conversationId = nil
+  }
+
+  // MARK: - Image / video generation (control plane)
+
+  func generateImage() async {
+    guard canUseMediaDoors else {
+      mediaError = "Control plane + device key required for image generation."
+      return
+    }
+    let prompt = imagePrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !prompt.isEmpty else {
+      mediaError = "Enter an image prompt."
+      return
+    }
+    guard let model = selectedImageModel else {
+      mediaError = "Pick an image model."
+      return
+    }
+    mediaBusy = true
+    mediaError = nil
+    mediaStatus = "Generating…"
+    lastImageBase64 = nil
+    defer { mediaBusy = false }
+    do {
+      let res = try await controlPlane.generateImage(model: model.model, prompt: prompt)
+      lastImageBase64 = res.firstBase64
+      lastImageModel = res.model ?? model.model
+      mediaStatus = "Done · \(lastImageModel ?? model.model)"
+      await refreshPlaneBalanceOnly()
+    } catch {
+      mediaError = error.localizedDescription
+      mediaStatus = nil
+    }
+  }
+
+  func generateVideo() async {
+    guard canUseMediaDoors else {
+      mediaError = "Control plane + device key required for video generation."
+      return
+    }
+    let prompt = videoPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+    let imageRef = videoImageRef.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !prompt.isEmpty || !imageRef.isEmpty else {
+      mediaError = "Enter a video prompt and/or an image URL / data URL for i2v."
+      return
+    }
+    guard let model = selectedVideoModel else {
+      mediaError = "Pick a video model."
+      return
+    }
+    mediaBusy = true
+    mediaError = nil
+    mediaStatus = "Generating video (can take minutes)…"
+    lastVideoURL = nil
+    defer { mediaBusy = false }
+    do {
+      let res = try await controlPlane.generateVideo(
+        model: model.model,
+        prompt: prompt.isEmpty ? " " : prompt,
+        image: imageRef.isEmpty ? nil : imageRef
+      )
+      lastVideoURL = res.video
+      lastVideoModel = res.model ?? model.model
+      mediaStatus = "Done · \(lastVideoModel ?? model.model)"
+      await refreshPlaneBalanceOnly()
+    } catch {
+      mediaError = error.localizedDescription
+      mediaStatus = nil
+    }
+  }
+
+  private func refreshPlaneBalanceOnly() async {
+    guard deviceKeyPresent else { return }
+    if let me = try? await controlPlane.me() {
+      planeBalance = me.usage?.balanceDescription
+      banner = statusBannerPlane(modelCount: models.count, me: me)
+    }
   }
 }

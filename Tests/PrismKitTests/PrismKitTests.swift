@@ -9,7 +9,7 @@ import FoundationNetworking
 final class PrismKitTests: XCTestCase {
   func testHealthString() {
     XCTAssertEqual(PrismKit.health(), "ok:PrismKit")
-    XCTAssertEqual(PrismKit.version, "0.4.1")
+    XCTAssertEqual(PrismKit.version, "0.5.0")
   }
 
   func testSessionCookieExportRestore() throws {
@@ -34,6 +34,18 @@ final class PrismKitTests: XCTestCase {
     XCTAssertEqual(StoreProducts.allCreditPacks.count, 3)
     XCTAssertTrue(StoreProducts.allCreditPacks.contains(StoreProducts.credit5))
     XCTAssertEqual(StoreProducts.packs.map(\.creditUSD), [5, 20, 50])
+  }
+
+  func testImageGenerationResponseDecode() throws {
+    let json = #"{"created":1,"model":"m","data":[{"b64_json":"abc123"}]}"#.data(using: .utf8)!
+    let res = try JSONDecoder().decode(ImageGenerationResponse.self, from: json)
+    XCTAssertEqual(res.firstBase64, "abc123")
+  }
+
+  func testVideoGenerationResponseDecode() throws {
+    let json = #"{"model":"v","video":"https://cdn.example/x.mp4"}"#.data(using: .utf8)!
+    let res = try JSONDecoder().decode(VideoGenerationResponse.self, from: json)
+    XCTAssertEqual(res.video, "https://cdn.example/x.mp4")
   }
 
   func testOpenAISSEParserDeltas() {
@@ -419,6 +431,30 @@ final class ControlPlaneClientTests: XCTestCase {
     } catch {
       XCTFail("wrong error \(error)")
     }
+  }
+
+  func testGenerateImageParsesB64() async throws {
+    MockURLProtocol.handler = { req in
+      XCTAssertEqual(req.url?.path, "/v1/images/generations")
+      XCTAssertEqual(req.value(forHTTPHeaderField: "Authorization"), "Bearer pcp_k")
+      let body = #"{"created":1,"model":"xai/grok-imagine-image","data":[{"b64_json":"aaa"}]}"#.data(using: .utf8)!
+      return (200, body, ["Content-Type": "application/json"])
+    }
+    let client = makeClient(key: "pcp_k")
+    let res = try await client.generateImage(model: "xai/grok-imagine-image", prompt: "red circle")
+    XCTAssertEqual(res.firstBase64, "aaa")
+    XCTAssertEqual(res.model, "xai/grok-imagine-image")
+  }
+
+  func testGenerateVideoParsesUrl() async throws {
+    MockURLProtocol.handler = { req in
+      XCTAssertEqual(req.url?.path, "/v1/videos/generations")
+      let body = #"{"model":"google/veo","video":"https://example.com/v.mp4"}"#.data(using: .utf8)!
+      return (200, body, ["Content-Type": "application/json"])
+    }
+    let client = makeClient(key: "pcp_k")
+    let res = try await client.generateVideo(model: "google/veo", prompt: "waves")
+    XCTAssertEqual(res.video, "https://example.com/v.mp4")
   }
 
   func testOpenAIStreamBodyParsedViaSendRaw() async throws {

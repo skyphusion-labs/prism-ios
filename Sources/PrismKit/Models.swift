@@ -331,6 +331,57 @@ public struct ControlPlaneErrorBody: Codable, Sendable, Equatable {
   public let message: String?
 }
 
+// MARK: - Control plane image / video (unit-priced doors)
+
+/// `POST /v1/images/generations` body (`model` + `prompt`).
+public struct ImageGenerationRequest: Codable, Sendable, Equatable {
+  public var model: String
+  public var prompt: String
+
+  public init(model: String, prompt: String) {
+    self.model = model
+    self.prompt = prompt
+  }
+}
+
+/// OpenAI-ish image envelope; plane returns `data[].b64_json`.
+public struct ImageGenerationResponse: Codable, Sendable, Equatable {
+  public let created: Int?
+  public let model: String?
+  public let data: [ImageGenerationData]?
+  public let error: ControlPlaneErrorBody?
+
+  public struct ImageGenerationData: Codable, Sendable, Equatable {
+    public let b64_json: String?
+    public let url: String?
+  }
+
+  /// First image payload as raw base64 (no data-URL prefix).
+  public var firstBase64: String? {
+    data?.first?.b64_json
+  }
+}
+
+/// `POST /v1/videos/generations` body. `image` is optional i2v (data: or https:).
+public struct VideoGenerationRequest: Codable, Sendable, Equatable {
+  public var model: String
+  public var prompt: String?
+  public var image: String?
+
+  public init(model: String, prompt: String? = nil, image: String? = nil) {
+    self.model = model
+    self.prompt = prompt
+    self.image = image
+  }
+}
+
+/// Plane video envelope: `video` is a URL or inline asset string.
+public struct VideoGenerationResponse: Codable, Sendable, Equatable {
+  public let model: String?
+  public let video: String?
+  public let error: ControlPlaneErrorBody?
+}
+
 public struct HealthResponse: Codable, Sendable, Equatable {
   public let ok: Bool
   public let ts: Int?
