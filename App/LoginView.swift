@@ -1,4 +1,5 @@
 import SwiftUI
+import PrismKit
 
 struct LoginView: View {
   @EnvironmentObject private var state: AppState
@@ -64,6 +65,6 @@ struct LoginView: View {
 #Preview {
   NavigationStack {
     LoginView()
-      .environmentObject(AppState())
+      .environmentObject(AppState(secrets: MemorySecretStore()))
   }
 }

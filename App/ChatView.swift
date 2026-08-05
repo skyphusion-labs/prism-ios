@@ -78,7 +78,7 @@ struct ChatView: View {
         }
         .disabled(state.turns.isEmpty)
       }
-      if state.authenticated {
+      if state.backend == .playground, state.authenticated {
         ToolbarItem(placement: .topBarTrailing) {
           Button("Sign out") {
             Task { await state.logout() }
@@ -114,7 +114,7 @@ private struct TurnBubble: View {
   NavigationStack {
     ChatView()
       .environmentObject({
-        let s = AppState()
+        let s = AppState(secrets: MemorySecretStore())
         s.authMode = "access"
         s.authenticated = true
         s.models = [

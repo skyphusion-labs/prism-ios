@@ -3,38 +3,49 @@ import PrismKit
 
 struct SettingsView: View {
   @EnvironmentObject private var state: AppState
-  @State private var draftURL: String = ""
+  @State private var draftPlayURL: String = ""
+  @State private var draftPlaneURL: String = ""
+  @State private var pastedDeviceKey: String = ""
 
   var body: some View {
     Form {
       Section {
-        TextField("Base URL", text: $draftURL)
-          .textInputAutocapitalization(.never)
-          .autocorrectionDisabled()
-          .keyboardType(.URL)
-          .textContentType(.URL)
-        Button("Apply and reload") {
-          state.baseURLString = draftURL
-          state.rebuildClient()
-          Task { await state.refreshModels() }
+        Picker("Backend", selection: Binding(
+          get: { state.backend },
+          set: { state.setBackend($0) }
+        )) {
+          ForEach(BackendKind.allCases) { kind in
+            Text(kind.title).tag(kind)
+          }
         }
-        Button("Use play.skyphusion.org") {
-          draftURL = PrismClient.playBaseURL.absoluteString
-          state.baseURLString = draftURL
-          state.rebuildClient()
-          Task { await state.refreshModels() }
-        }
+        .pickerStyle(.segmented)
       } header: {
-        Text("Playground server")
+        Text("Backend")
       } footer: {
         Text(
-          "Public playground needs signup. Self-host Access mode can chat without this app's login when the Worker trusts Access (or local anonymous)."
+          "Playground is play.skyphusion.org (session cookie). Control plane is play-proxy (pcp_ device key, metered)."
         )
+      }
+
+      if state.backend == .playground {
+        playgroundSection
+      } else {
+        controlPlaneSection
       }
 
       Section {
         row("Mode", state.authMode ?? "unknown")
-        row("Signed in", state.authenticated ? (state.sessionUsername ?? "yes") : "no")
+        if state.backend == .playground {
+          row("Signed in", state.authenticated ? (state.sessionUsername ?? "yes") : "no")
+        } else {
+          row("Device key", state.deviceKeyPresent ? "stored" : "none")
+          if let label = state.planeClientLabel {
+            row("Client", label)
+          }
+          if let bal = state.planeBalance {
+            row("Balance", bal)
+          }
+        }
         row("Models", "\(state.models.count)")
         row("Kit", "\(PrismKit.name) \(PrismKit.version)")
       } header: {
@@ -45,7 +56,7 @@ struct SettingsView: View {
         Button("Refresh models") {
           Task { await state.refreshModels() }
         }
-        if state.authenticated {
+        if state.backend == .playground, state.authenticated {
           Button("Sign out", role: .destructive) {
             Task { await state.logout() }
           }
@@ -60,7 +71,102 @@ struct SettingsView: View {
     }
     .navigationTitle("Settings")
     .onAppear {
-      draftURL = state.baseURLString
+      draftPlayURL = state.baseURLString
+      draftPlaneURL = state.controlPlaneURLString
+    }
+  }
+
+  @ViewBuilder
+  private var playgroundSection: some View {
+    Section {
+      TextField("Base URL", text: $draftPlayURL)
+        .textInputAutocapitalization(.never)
+        .autocorrectionDisabled()
+        .keyboardType(.URL)
+        .textContentType(.URL)
+      Button("Apply and reload") {
+        state.baseURLString = draftPlayURL
+        state.rebuildClients()
+        Task { await state.refreshModels() }
+      }
+      Button("Use play.skyphusion.org") {
+        draftPlayURL = PrismClient.playBaseURL.absoluteString
+        state.baseURLString = draftPlayURL
+        state.rebuildClients()
+        Task { await state.refreshModels() }
+      }
+    } header: {
+      Text("Playground server")
+    } footer: {
+      Text(
+        "Public playground needs signup. Self-host Access mode can chat without this app's login when the Worker trusts Access (or local anonymous)."
+      )
+    }
+  }
+
+  @ViewBuilder
+  private var controlPlaneSection: some View {
+    Section {
+      TextField("Base URL", text: $draftPlaneURL)
+        .textInputAutocapitalization(.never)
+        .autocorrectionDisabled()
+        .keyboardType(.URL)
+        .textContentType(.URL)
+      Button("Apply URL") {
+        state.controlPlaneURLString = draftPlaneURL
+        state.rebuildClients(clearSession: false)
+        Task { await state.refreshModels() }
+      }
+      Button("Use play-proxy.skyphusion.org") {
+        draftPlaneURL = ControlPlaneClient.productionBaseURL.absoluteString
+        state.controlPlaneURLString = draftPlaneURL
+        state.rebuildClients(clearSession: false)
+        Task { await state.refreshModels() }
+      }
+    } header: {
+      Text("Control plane server")
+    }
+
+    Section {
+      SecureField("Enrollment token", text: $state.enrollmentToken)
+        .textInputAutocapitalization(.never)
+        .autocorrectionDisabled()
+      Button {
+        Task { await state.enrollPlane() }
+      } label: {
+        if state.isBusy {
+          ProgressView()
+        } else {
+          Text("Enroll device")
+        }
+      }
+      .disabled(state.isBusy || state.enrollmentToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    } header: {
+      Text("Enrollment")
+    } footer: {
+      Text(
+        "Single-use token from the plane operator. The device key (pcp_…) is returned once and stored in the Keychain."
+      )
+    }
+
+    Section {
+      SecureField("Or paste pcp_ device key", text: $pastedDeviceKey)
+        .textInputAutocapitalization(.never)
+        .autocorrectionDisabled()
+      Button("Save device key") {
+        Task {
+          await state.saveDeviceKey(pastedDeviceKey)
+          pastedDeviceKey = ""
+        }
+      }
+      .disabled(pastedDeviceKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+      if state.deviceKeyPresent {
+        Button("Clear device key", role: .destructive) {
+          Task { await state.clearDeviceKey() }
+        }
+      }
+    } header: {
+      Text("Device key")
     }
   }
 
@@ -79,6 +185,6 @@ struct SettingsView: View {
 #Preview {
   NavigationStack {
     SettingsView()
-      .environmentObject(AppState())
+      .environmentObject(AppState(secrets: MemorySecretStore()))
   }
 }

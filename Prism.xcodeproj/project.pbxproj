@@ -12,6 +12,7 @@
 		33360F83FD87F9DD968DFA2F /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94567EB75BC9121E95247AB1 /* LoginView.swift */; };
 		5EA917AF5480F8C34E794B7E /* PrismKit in Frameworks */ = {isa = PBXBuildFile; productRef = BF95EDC2BE93FF361E1F2D6E /* PrismKit */; };
 		61C14F92F5E19AD247115B66 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE232F0CC41662D1703EF458 /* AppState.swift */; };
+		898BA0DED59FDABB75D032A7 /* EnrollView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0044568A64445857E24FD409 /* EnrollView.swift */; };
 		8C3819507DE7FD87AA8679F9 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F65D9A85386E8EFA1A6D0C70 /* ChatView.swift */; };
 		B9DEEA98E63BEE7F2FC9A6EE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E02BE541FF59B758F2AECB0 /* SettingsView.swift */; };
 		C6F007D55BBA410ABB9E2DF1 /* PrismApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4115D7B498B51A37C0C1059 /* PrismApp.swift */; };
@@ -19,6 +20,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		0044568A64445857E24FD409 /* EnrollView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnrollView.swift; sourceTree = "<group>"; };
 		20325D4A56CE1D2FAD548CC0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		3CBECDC40DB2F7D8BF88B956 /* Prism.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Prism.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		6E02BE541FF59B758F2AECB0 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -58,6 +60,7 @@
 				FE232F0CC41662D1703EF458 /* AppState.swift */,
 				20325D4A56CE1D2FAD548CC0 /* Assets.xcassets */,
 				F65D9A85386E8EFA1A6D0C70 /* ChatView.swift */,
+				0044568A64445857E24FD409 /* EnrollView.swift */,
 				94567EB75BC9121E95247AB1 /* LoginView.swift */,
 				80E2E3B365ADCF50760B2280 /* ModelPickerView.swift */,
 				C4115D7B498B51A37C0C1059 /* PrismApp.swift */,
@@ -157,6 +160,7 @@
 			files = (
 				61C14F92F5E19AD247115B66 /* AppState.swift in Sources */,
 				8C3819507DE7FD87AA8679F9 /* ChatView.swift in Sources */,
+				898BA0DED59FDABB75D032A7 /* EnrollView.swift in Sources */,
 				33360F83FD87F9DD968DFA2F /* LoginView.swift in Sources */,
 				16D11E1C37D023255B71B397 /* ModelPickerView.swift in Sources */,
 				C6F007D55BBA410ABB9E2DF1 /* PrismApp.swift in Sources */,

@@ -89,10 +89,8 @@ public final class PrismClient: @unchecked Sendable {
     return response
   }
 
-  /// Streaming chat via SSE (`POST /api/chat/stream`).
-  ///
-  /// Yields delta/done/error events as they arrive. The full response body is
-  /// buffered then parsed (URLSession async bytes would be a follow-up).
+  /// Streaming chat via SSE (`POST /api/chat/stream`), full-body then parse.
+  /// Prefer ``chatStreamEvents`` for token-by-token UI updates on Apple platforms.
   public func chatStream(_ body: ChatRequestBody) async throws -> [ChatStreamEvent] {
     let dataBody = try JSONEncoder().encode(body)
     let (data, _) = try await http.sendRaw(
@@ -105,7 +103,40 @@ public final class PrismClient: @unchecked Sendable {
     return SSEParser.parseChatEvents(from: text)
   }
 
-  /// Convenience: stream and concatenate delta text.
+  /// Incremental SSE: yields events as frames arrive (Darwin `URLSession.bytes`;
+  /// Linux buffers then parses -- same event shape either way).
+  ///
+  /// Note: `URLProtocol` mocks often deliver an empty `AsyncBytes` stream; unit
+  /// tests should assert via ``chatStream`` (full body) instead of this path.
+  public func chatStreamEvents(_ body: ChatRequestBody) -> AsyncThrowingStream<ChatStreamEvent, Error> {
+    AsyncThrowingStream { continuation in
+      let task = Task {
+        do {
+          let dataBody = try JSONEncoder().encode(body)
+          var headers = defaultHeaders
+          if headers["Accept"] == nil {
+            headers["Accept"] = "text/event-stream"
+          }
+          let req = try http.request(
+            method: "POST",
+            path: "/api/chat/stream",
+            body: dataBody,
+            headers: headers
+          )
+          for try await event in SSEStream.chatEvents(session: http.session, request: req) {
+            if Task.isCancelled { break }
+            continuation.yield(event)
+          }
+          continuation.finish()
+        } catch {
+          continuation.finish(throwing: error)
+        }
+      }
+      continuation.onTermination = { _ in task.cancel() }
+    }
+  }
+
+  /// Convenience: stream and concatenate delta text (full-body parse; reliable in tests).
   public func chatStreamText(_ body: ChatRequestBody) async throws -> (text: String, final: ChatResponse?) {
     let events = try await chatStream(body)
     var parts: [String] = []
