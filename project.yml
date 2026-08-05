@@ -63,5 +63,7 @@ schemes:
         Prism: all
     run:
       config: Debug
+      # Local IAP testing without App Store sandbox account
+      storeKitConfiguration: Configuration.storekit
     test:
       config: Debug

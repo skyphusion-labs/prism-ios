@@ -1,8 +1,10 @@
 import SwiftUI
 import PrismKit
+import StoreKit
 
 struct SettingsView: View {
   @EnvironmentObject private var state: AppState
+  @StateObject private var store = StoreManager()
   @State private var draftPlayURL: String = ""
   @State private var draftPlaneURL: String = ""
   @State private var pastedDeviceKey: String = ""
@@ -31,6 +33,7 @@ struct SettingsView: View {
         playgroundSection
       } else {
         controlPlaneSection
+        topUpSection
       }
 
       Section {
@@ -73,6 +76,11 @@ struct SettingsView: View {
     .onAppear {
       draftPlayURL = state.baseURLString
       draftPlaneURL = state.controlPlaneURLString
+    }
+    .task(id: state.backend) {
+      if state.backend == .controlPlane {
+        await store.loadProducts()
+      }
     }
   }
 
@@ -167,6 +175,74 @@ struct SettingsView: View {
       }
     } header: {
       Text("Device key")
+    }
+  }
+
+  @ViewBuilder
+  private var topUpSection: some View {
+    Section {
+      if store.isLoading {
+        HStack {
+          ProgressView()
+          Text("Loading products…")
+            .foregroundStyle(.secondary)
+        }
+      } else if store.sortedProducts.isEmpty {
+        Button("Reload products") {
+          Task { await store.loadProducts() }
+        }
+        .disabled(!state.deviceKeyPresent || store.isPurchasing)
+      } else {
+        ForEach(store.sortedProducts, id: \.id) { product in
+          Button {
+            Task { _ = await store.purchase(product) }
+          } label: {
+            HStack {
+              VStack(alignment: .leading, spacing: 2) {
+                Text(product.displayName)
+                if let usd = store.creditUSD(for: product.id) {
+                  Text("\(usd) USD prepaid credit (intended)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                } else {
+                  Text(product.description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                }
+              }
+              Spacer()
+              if store.isPurchasing {
+                ProgressView()
+              } else {
+                Text(product.displayPrice)
+                  .foregroundStyle(.secondary)
+              }
+            }
+          }
+          .disabled(!state.deviceKeyPresent || store.isPurchasing)
+        }
+      }
+
+      if let msg = store.statusMessage {
+        Text(msg)
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+      }
+      if let err = store.errorMessage {
+        Text(err)
+          .font(.footnote)
+          .foregroundStyle(.red)
+      }
+      if let tx = store.lastTransactionId {
+        row("Last transaction", tx)
+      }
+    } header: {
+      Text("Top up")
+    } footer: {
+      Text(
+        "Consumable App Store packs. Device key required so a future plane redeem can attach credit to this account. Server-side receipt redeem is not live yet."
+      )
     }
   }
 

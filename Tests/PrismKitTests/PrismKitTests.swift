@@ -9,7 +9,7 @@ import FoundationNetworking
 final class PrismKitTests: XCTestCase {
   func testHealthString() {
     XCTAssertEqual(PrismKit.health(), "ok:PrismKit")
-    XCTAssertEqual(PrismKit.version, "0.3.1")
+    XCTAssertEqual(PrismKit.version, "0.4.0")
   }
 
   func testSessionCookieExportRestore() throws {

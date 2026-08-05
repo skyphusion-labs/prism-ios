@@ -52,8 +52,9 @@ CI runs package tests on Ubuntu. The iOS app is built with Xcode locally (not in
 
 - Kit 0.3.1: playground + control-plane OpenAI SSE streams; Keychain for plane key **and** playground session cookie.
 - App: dual backend, stay signed-in across launches (session restore), plane enroll, streaming chat.
-- App Store Connect: app `6798391677`, three consumable credit IAPs READY_TO_SUBMIT; `Configuration.storekit` + `StoreProducts`.
-- Next: StoreKit purchase UI; plane receipt redeem when contract un-parks it.
+- App Store Connect: app `6798391677`, three consumable credit IAPs READY_TO_SUBMIT.
+- App Settings top-up: StoreKit 2 purchase UI (local via `Configuration.storekit`); plane receipt redeem deferred.
+- Next: plane receipt redeem when contract un-parks it.
 
 ## Related
 
