@@ -22,6 +22,8 @@
 	<string>1</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Take a photo to attach for vision chat or image-to-video.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Unlock Prism when biometric lock is enabled.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Record audio to transcribe with speech-to-text models.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>

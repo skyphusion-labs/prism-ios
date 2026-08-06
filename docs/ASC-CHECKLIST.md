@@ -25,7 +25,13 @@ Use `asc` for API work; dashboard only for agreement/tax that CLI cannot do.
 
 - `NSPhotoLibraryUsageDescription` -- reference images for i2i / i2v  
 - `NSPhotoLibraryAddUsageDescription` -- save generated images  
-- `NSMicrophoneUsageDescription` -- STT recording (Audio → Transcribe)  
+- `NSMicrophoneUsageDescription` -- STT recording (file + live WebSocket)  
+- `NSCameraUsageDescription` -- vision / i2v stills  
+- `NSFaceIDUsageDescription` -- optional biometric app lock  
+
+## Screenshots
+
+Shot list and capture notes: **`docs/ASC-SCREENSHOTS.md`**.
 
 ## API keys (local only)
 
@@ -55,24 +61,27 @@ StoreKit Server API key (optional, for stricter plane verification later):
 | Review notes | Operator enrollment token; control plane privacy (no server chat) |
 | Do not ship | Public top-up marketing until sandbox redeem verified on device |
 
-## Pre-submit ASC pass (operator) — 0.8.3
+## Pre-submit ASC pass (operator) — 0.8.4
 
 1. `asc apps list` / app 6798391677 still current  
 2. IAP three credit packs READY_TO_SUBMIT or approved  
-3. **Screenshots (iPhone 6.7" + 6.5"):** Chat with model picker + stream; Chat with photo attach;
-   Image generate result; Video (Seedance) generating/done; More → Usage; Settings top-up  
+3. **Screenshots (iPhone 6.7" + 6.5"):** follow `docs/ASC-SCREENSHOTS.md` (chat + cost, vision,
+   image, video, Usage, Face ID lock, top-up)  
 4. Privacy policy + support URLs live  
 5. Age rating questionnaire matches AI generation  
 6. Export compliance: HTTPS only  
-7. Privacy nutrition: photos, camera, mic; no tracking  
+7. Privacy nutrition: photos, camera, mic, Face ID; no tracking  
 8. **Review notes (paste in ASC):**  
    > Prism is a metered multimodal AI client. Enrollment uses a single-use operator token (or
-   > recovery pcp_ key) stored in Keychain. Control plane never stores chat text. IAP packs apply
-   > prepaid credit via POST /v1/store/redeem. Demo: enroll with provided token, chat once, open
-   > More → Usage, generate a short image. Contact: conrad@skyphusion.org  
+   > recovery pcp_ key) stored in Keychain. Optional Face ID/Touch ID lock gates the UI after
+   > background. Control plane never stores chat text. Per-request cost from plane headers when
+   > non-stream. Live STT uses GET /v1/stt/stream with Bearer on upgrade. IAP packs apply prepaid
+   > credit via POST /v1/store/redeem. Demo: enroll, enable biometric lock, chat once (see cost
+   > line), More → Usage, optional live mic. Contact: conrad@skyphusion.org  
 9. Build uploaded via TestFlight; internal group installed once  
+10. Home Screen widget (balance) + App Shortcuts (Chat / Usage / New chat) optional review mention  
 
-## Review notes template (0.8.3)
+## Review notes template (0.8.4)
 
 ```
 Account: TestFlight internal (or sandbox Apple ID for IAP)

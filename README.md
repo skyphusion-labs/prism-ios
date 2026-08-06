@@ -50,9 +50,10 @@ CI runs package tests on Ubuntu. The iOS app is built with Xcode locally (not in
 
 ## Status
 
-- Kit **0.8.3**: Usage/spend screen, chat rate preview, capability tags, import chats, camera +
-  clipboard attach, mic→STT draft, long video background + notify. Prior **0.8.2**: vision attach,
-  playground sync, Seedance default. Prior **0.8.1**: More hub, TestFlight path.
+- Kit **0.8.4**: biometric app lock, per-request cost headers, live STT WebSocket, home widget +
+  App Shortcuts, import merge/replace polish, ASC screenshot kit. Prior **0.8.3**: Usage screen,
+  rate preview, import, camera/clipboard, file STT draft, long video notify. Prior **0.8.2**:
+  vision, playground sync, Seedance.
 - App Store Connect: app `6798391677`, three consumable credit IAPs. See `docs/TESTFLIGHT.md`,
   `docs/ASC-CHECKLIST.md`.
 

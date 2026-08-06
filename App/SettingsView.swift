@@ -12,9 +12,35 @@ struct SettingsView: View {
   @State private var chatExportURL: ExportURL?
   @State private var showImportPicker = false
   @State private var importMessage: String?
+  @State private var pendingImportData: Data?
+  @State private var importPreview: AppState.ChatImportPreview?
+  @State private var showImportConfirm = false
 
   var body: some View {
     Form {
+      if state.backend == .controlPlane, state.deviceKeyPresent {
+        Section {
+          Toggle(
+            "Require \(BiometricLock.biometryLabel)",
+            isOn: Binding(
+              get: { state.biometricLockEnabled },
+              set: { state.setBiometricLockEnabled($0) }
+            )
+          )
+          .disabled(!BiometricLock.isAvailable())
+        } header: {
+          Text("Lock")
+        } footer: {
+          if BiometricLock.isAvailable() {
+            Text(
+              "When enabled, Prism asks for \(BiometricLock.biometryLabel) (or your device passcode) after launch and when returning from background. Device key stays in Keychain either way."
+            )
+          } else {
+            Text("Biometrics are not available on this device. Device key remains in Keychain.")
+          }
+        }
+      }
+
       if state.showDeveloperSettings {
         Section {
           Picker("Backend", selection: Binding(
@@ -281,14 +307,36 @@ struct SettingsView: View {
           defer { if access { url.stopAccessingSecurityScopedResource() } }
           do {
             let data = try Data(contentsOf: url)
-            try state.importSessionsJSON(data)
-            importMessage = "Imported chats (merged by id)."
+            let preview = try state.previewImportSessionsJSON(data)
+            pendingImportData = data
+            importPreview = preview
+            showImportConfirm = true
           } catch {
             importMessage = prismUserFacingError(error)
+            pendingImportData = nil
+            importPreview = nil
           }
         case .failure(let err):
           importMessage = err.localizedDescription
         }
+      }
+      .confirmationDialog(
+        importConfirmTitle,
+        isPresented: $showImportConfirm,
+        titleVisibility: .visible
+      ) {
+        Button("Merge (file wins on id clash)") {
+          applyPendingImport(replace: false)
+        }
+        Button("Replace all local chats", role: .destructive) {
+          applyPendingImport(replace: true)
+        }
+        Button("Cancel", role: .cancel) {
+          pendingImportData = nil
+          importPreview = nil
+        }
+      } message: {
+        Text(importConfirmMessage)
       }
       if let importMessage {
         Text(importMessage)
@@ -297,6 +345,7 @@ struct SettingsView: View {
       }
       Text(
         "Control plane never stores conversation text. Export/import for backup. "
+          + "Import previews the file, then merge or replace. "
           + "Playground cloud history: Chats list → Sync from playground cloud."
       )
       .font(.caption)
@@ -414,6 +463,47 @@ struct SettingsView: View {
       Text(value)
         .foregroundStyle(.secondary)
         .multilineTextAlignment(.trailing)
+    }
+  }
+
+  private var importConfirmTitle: String {
+    if let p = importPreview {
+      return "Import \(p.count) chat\(p.count == 1 ? "" : "s")?"
+    }
+    return "Import chats?"
+  }
+
+  private var importConfirmMessage: String {
+    guard let p = importPreview else {
+      return "Merge keeps local chats and overwrites matching ids. Replace discards current local list."
+    }
+    var lines: [String] = [
+      "\(p.newIds) new · \(p.overlappingIds) overlap existing ids.",
+    ]
+    if !p.titles.isEmpty {
+      let sample = p.titles.prefix(3).joined(separator: " · ")
+      lines.append("e.g. \(sample)")
+    }
+    lines.append("Merge keeps locals and overwrites matching ids. Replace discards the current list.")
+    return lines.joined(separator: "\n")
+  }
+
+  private func applyPendingImport(replace: Bool) {
+    guard let data = pendingImportData else { return }
+    defer {
+      pendingImportData = nil
+      importPreview = nil
+    }
+    do {
+      let result = try state.importSessionsJSON(data, replace: replace)
+      if replace {
+        importMessage = "Replaced local chats with \(result.count) from file."
+      } else {
+        importMessage =
+          "Merged \(result.count) from file (\(result.newIds) new, \(result.overlappingIds) updated)."
+      }
+    } catch {
+      importMessage = prismUserFacingError(error)
     }
   }
 }

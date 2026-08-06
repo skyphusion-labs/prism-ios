@@ -688,6 +688,75 @@ public struct UsageSummary: Codable, Sendable, Equatable {
   }
 }
 
+/// Metering facts from plane response headers (non-stream chat / media).
+public struct PlaneMeterHeaders: Sendable, Equatable {
+  public let usageMicroUsd: Int?
+  public let metered: Bool?
+  public let model: String?
+  public let period: String?
+  public let creditRemainingMicroUsd: Int?
+  public let allowanceRemainingMicroUsd: Int?
+
+  public init(
+    usageMicroUsd: Int? = nil,
+    metered: Bool? = nil,
+    model: String? = nil,
+    period: String? = nil,
+    creditRemainingMicroUsd: Int? = nil,
+    allowanceRemainingMicroUsd: Int? = nil
+  ) {
+    self.usageMicroUsd = usageMicroUsd
+    self.metered = metered
+    self.model = model
+    self.period = period
+    self.creditRemainingMicroUsd = creditRemainingMicroUsd
+    self.allowanceRemainingMicroUsd = allowanceRemainingMicroUsd
+  }
+
+  public init(http: HTTPURLResponse) {
+    func header(_ name: String) -> String? {
+      // HTTPURLResponse is case-insensitive on Apple; Linux may not be.
+      if let v = http.value(forHTTPHeaderField: name) { return v }
+      return http.value(forHTTPHeaderField: name.lowercased())
+    }
+    usageMicroUsd = header("prism-usage-micro-usd").flatMap(Int.init)
+    if let m = header("prism-metered") {
+      metered = m == "true" || m == "1"
+    } else {
+      metered = nil
+    }
+    model = header("prism-model")
+    period = header("prism-period")
+    creditRemainingMicroUsd = header("prism-credit-remaining-micro-usd").flatMap(Int.init)
+    allowanceRemainingMicroUsd = header("prism-allowance-remaining-micro-usd").flatMap(Int.init)
+  }
+
+  public var costDescription: String? {
+    guard let u = usageMicroUsd else { return nil }
+    if metered == false {
+      return "Unmetered (plane could not price this call)"
+    }
+    let usd = Double(u) / 1_000_000.0
+    if usd >= 0.01 {
+      return String(format: "This request: $%.4f", usd)
+    }
+    return String(format: "This request: $%.6f", usd)
+  }
+}
+
+public struct SttSessionTicket: Codable, Sendable, Equatable {
+  public let ticket: String
+  public let expires_at: String?
+  public let expires_in: Int?
+  public let ws_protocol: String?
+  public let stream_path: String?
+
+  enum CodingKeys: String, CodingKey {
+    case ticket, expires_at, expires_in, stream_path
+    case ws_protocol = "protocol"
+  }
+}
+
 extension ModelEntry {
   /// Short capability tags for pickers (vision, stream, tier, unit).
   public var capabilityTags: [String] {

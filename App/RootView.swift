@@ -6,7 +6,9 @@ struct RootView: View {
 
   var body: some View {
     Group {
-      if state.needsPlaygroundLogin {
+      if state.isBiometricallyLocked {
+        BiometricLockView()
+      } else if state.needsPlaygroundLogin {
         NavigationStack {
           LoginView()
             .navigationTitle("Prism")
@@ -74,6 +76,54 @@ struct RootView: View {
       } label: {
         Image(systemName: "gearshape")
       }
+    }
+  }
+}
+
+/// Full-screen Face ID / Touch ID gate before the enrolled session is visible.
+private struct BiometricLockView: View {
+  @EnvironmentObject private var state: AppState
+  @State private var busy = false
+
+  var body: some View {
+    VStack(spacing: 24) {
+      Spacer()
+      Image(systemName: "lock.shield.fill")
+        .font(.system(size: 56))
+        .foregroundStyle(Color(red: 29 / 255, green: 78 / 255, blue: 216 / 255))
+        .accessibilityHidden(true)
+      Text("Prism is locked")
+        .font(.title2.weight(.semibold))
+      Text("Use \(BiometricLock.biometryLabel) to unlock your enrolled session.")
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
+        .multilineTextAlignment(.center)
+        .padding(.horizontal, 32)
+      Button {
+        Task {
+          busy = true
+          await state.unlockWithBiometrics()
+          busy = false
+        }
+      } label: {
+        if busy {
+          ProgressView()
+            .frame(minWidth: 160, minHeight: 44)
+        } else {
+          Label("Unlock with \(BiometricLock.biometryLabel)", systemImage: "faceid")
+            .frame(minWidth: 160, minHeight: 44)
+        }
+      }
+      .buttonStyle(.borderedProminent)
+      .disabled(busy)
+      .accessibilityLabel("Unlock Prism")
+      Spacer()
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(Color(.systemBackground))
+    .task {
+      // Auto-prompt once on appear so unlock is one glance, not two taps.
+      await state.unlockWithBiometrics()
     }
   }
 }

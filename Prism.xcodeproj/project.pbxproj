@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		04B9CBBF92D60EB6483FE5B5 /* LivePCMCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23A68163390DA2D20D8511F7 /* LivePCMCapture.swift */; };
 		15F542070E4ECF32304AE4D4 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DC2EA274A0490B6F0DEC5FD /* RootView.swift */; };
 		16D11E1C37D023255B71B397 /* ModelPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80E2E3B365ADCF50760B2280 /* ModelPickerView.swift */; };
 		33360F83FD87F9DD968DFA2F /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94567EB75BC9121E95247AB1 /* LoginView.swift */; };
@@ -17,8 +18,11 @@
 		5DF311595720F8E736CB270B /* SpeechGenerateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE0FF3705A3645B3B6397E38 /* SpeechGenerateView.swift */; };
 		5EA917AF5480F8C34E794B7E /* PrismKit in Frameworks */ = {isa = PBXBuildFile; productRef = BF95EDC2BE93FF361E1F2D6E /* PrismKit */; };
 		61C14F92F5E19AD247115B66 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE232F0CC41662D1703EF458 /* AppState.swift */; };
+		6ABE2964DB4D5B87E7C858F1 /* BiometricLock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37FA2272002A85BFCC9ACA06 /* BiometricLock.swift */; };
 		898BA0DED59FDABB75D032A7 /* EnrollView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0044568A64445857E24FD409 /* EnrollView.swift */; };
 		8C3819507DE7FD87AA8679F9 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F65D9A85386E8EFA1A6D0C70 /* ChatView.swift */; };
+		911682D8AFBAB551FD3AEA8E /* PrismWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 8A0D770899DE58CF9B021732 /* PrismWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		92413ACF4D481B527D0488B0 /* PrismWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEB11428DB56B9C2AC9B1168 /* PrismWidget.swift */; };
 		A6E821D417A39F86FEE743D3 /* AudioRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF2A06FA03AA3BC3922B359C /* AudioRecorder.swift */; };
 		B9DEEA98E63BEE7F2FC9A6EE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E02BE541FF59B758F2AECB0 /* SettingsView.swift */; };
 		C6F007D55BBA410ABB9E2DF1 /* PrismApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4115D7B498B51A37C0C1059 /* PrismApp.swift */; };
@@ -26,28 +30,60 @@
 		D7AF72B123245E304C361EC1 /* Haptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38DDFCFF6BA022D56B751299 /* Haptics.swift */; };
 		DF8F9E7B6ADC379B646D172C /* SessionListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63C1660433159F3E5363F65D /* SessionListView.swift */; };
 		E72183EE09D6643B45C7A504 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 20325D4A56CE1D2FAD548CC0 /* Assets.xcassets */; };
+		F35283735B0CA3C79A42F95D /* PrismIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F68E37E40EC71808CA5FCDB /* PrismIntents.swift */; };
 		F8CA0D87C3AAE424FB53327F /* MediaGenerateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B380EA7A1F0D104D733EB197 /* MediaGenerateView.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		38F085BB6F98F2A4B5164278 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = F89E62DC5A2CEA3C9FF3EC43 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1150A7773A82D5813CC29F16;
+			remoteInfo = PrismWidget;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		20AA94B06AAE0A48753A277C /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				911682D8AFBAB551FD3AEA8E /* PrismWidget.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		0044568A64445857E24FD409 /* EnrollView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnrollView.swift; sourceTree = "<group>"; };
 		20325D4A56CE1D2FAD548CC0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		23A68163390DA2D20D8511F7 /* LivePCMCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LivePCMCapture.swift; sourceTree = "<group>"; };
 		25B6C246B14B32BEDBDDC7DE /* MusicGenerateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MusicGenerateView.swift; sourceTree = "<group>"; };
 		303C401457C10158AA627CEB /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		37FA2272002A85BFCC9ACA06 /* BiometricLock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BiometricLock.swift; sourceTree = "<group>"; };
 		38DDFCFF6BA022D56B751299 /* Haptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Haptics.swift; sourceTree = "<group>"; };
 		3CBECDC40DB2F7D8BF88B956 /* Prism.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Prism.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3F68E37E40EC71808CA5FCDB /* PrismIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrismIntents.swift; sourceTree = "<group>"; };
+		50D0A77935D1B162F48B0CCA /* PrismWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PrismWidget.entitlements; sourceTree = "<group>"; };
 		63C1660433159F3E5363F65D /* SessionListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionListView.swift; sourceTree = "<group>"; };
 		6E02BE541FF59B758F2AECB0 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		700D7F39C49B7C8408A36FF5 /* prism-ios */ = {isa = PBXFileReference; lastKnownFileType = folder; name = "prism-ios"; path = .; sourceTree = SOURCE_ROOT; };
 		80E2E3B365ADCF50760B2280 /* ModelPickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ModelPickerView.swift; sourceTree = "<group>"; };
+		8A0D770899DE58CF9B021732 /* PrismWidget.appex */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = "wrapper.app-extension"; path = PrismWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		8DC2EA274A0490B6F0DEC5FD /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		94567EB75BC9121E95247AB1 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		AF2A06FA03AA3BC3922B359C /* AudioRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorder.swift; sourceTree = "<group>"; };
 		B380EA7A1F0D104D733EB197 /* MediaGenerateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaGenerateView.swift; sourceTree = "<group>"; };
 		BF2166C757BF46326F065EC8 /* MoreHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoreHubView.swift; sourceTree = "<group>"; };
 		C4115D7B498B51A37C0C1059 /* PrismApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrismApp.swift; sourceTree = "<group>"; };
+		C53EA09CC97931EB498F64DB /* Prism.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Prism.entitlements; sourceTree = "<group>"; };
 		D66DD4FCC23724E0D8131B20 /* UsageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageView.swift; sourceTree = "<group>"; };
 		DE0FF3705A3645B3B6397E38 /* SpeechGenerateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechGenerateView.swift; sourceTree = "<group>"; };
+		DEB11428DB56B9C2AC9B1168 /* PrismWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrismWidget.swift; sourceTree = "<group>"; };
 		F65D9A85386E8EFA1A6D0C70 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		F6CB6EC66875B30FD0229C59 /* StoreManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreManager.swift; sourceTree = "<group>"; };
 		FE232F0CC41662D1703EF458 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
@@ -70,8 +106,18 @@
 			children = (
 				5D028E93F161D106196F922F /* App */,
 				FBFB9C693CC6D0C3A8B1B90E /* Packages */,
+				09A94064B7CF9EC06CBA5D2D /* Widget */,
 				82EA743558BFD02527A88470 /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		09A94064B7CF9EC06CBA5D2D /* Widget */ = {
+			isa = PBXGroup;
+			children = (
+				50D0A77935D1B162F48B0CCA /* PrismWidget.entitlements */,
+				DEB11428DB56B9C2AC9B1168 /* PrismWidget.swift */,
+			);
+			path = Widget;
 			sourceTree = "<group>";
 		};
 		5D028E93F161D106196F922F /* App */ = {
@@ -80,16 +126,20 @@
 				FE232F0CC41662D1703EF458 /* AppState.swift */,
 				20325D4A56CE1D2FAD548CC0 /* Assets.xcassets */,
 				AF2A06FA03AA3BC3922B359C /* AudioRecorder.swift */,
+				37FA2272002A85BFCC9ACA06 /* BiometricLock.swift */,
 				F65D9A85386E8EFA1A6D0C70 /* ChatView.swift */,
 				0044568A64445857E24FD409 /* EnrollView.swift */,
 				38DDFCFF6BA022D56B751299 /* Haptics.swift */,
+				23A68163390DA2D20D8511F7 /* LivePCMCapture.swift */,
 				94567EB75BC9121E95247AB1 /* LoginView.swift */,
 				B380EA7A1F0D104D733EB197 /* MediaGenerateView.swift */,
 				80E2E3B365ADCF50760B2280 /* ModelPickerView.swift */,
 				BF2166C757BF46326F065EC8 /* MoreHubView.swift */,
 				25B6C246B14B32BEDBDDC7DE /* MusicGenerateView.swift */,
 				303C401457C10158AA627CEB /* OnboardingView.swift */,
+				C53EA09CC97931EB498F64DB /* Prism.entitlements */,
 				C4115D7B498B51A37C0C1059 /* PrismApp.swift */,
+				3F68E37E40EC71808CA5FCDB /* PrismIntents.swift */,
 				8DC2EA274A0490B6F0DEC5FD /* RootView.swift */,
 				63C1660433159F3E5363F65D /* SessionListView.swift */,
 				6E02BE541FF59B758F2AECB0 /* SettingsView.swift */,
@@ -104,6 +154,7 @@
 			isa = PBXGroup;
 			children = (
 				3CBECDC40DB2F7D8BF88B956 /* Prism.app */,
+				8A0D770899DE58CF9B021732 /* PrismWidget.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -119,6 +170,23 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		1150A7773A82D5813CC29F16 /* PrismWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 953DDB88DADBCD6792ACD827 /* Build configuration list for PBXNativeTarget "PrismWidget" */;
+			buildPhases = (
+				8C628C974D5E5056332FEEBC /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = PrismWidget;
+			packageProductDependencies = (
+			);
+			productName = PrismWidget;
+			productReference = 8A0D770899DE58CF9B021732 /* PrismWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		CDFC0F00FA9F3945D4407FE1 /* Prism */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = C25105F88BA2397C1CC00D97 /* Build configuration list for PBXNativeTarget "Prism" */;
@@ -126,10 +194,12 @@
 				7560C300E64021D8BADEC8B6 /* Sources */,
 				3E3DEC94F2D9C4F6FCCD8F48 /* Resources */,
 				530205CAA2885336FD1EDFD5 /* Frameworks */,
+				20AA94B06AAE0A48753A277C /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				35FF1DC01377734ED45A0018 /* PBXTargetDependency */,
 			);
 			name = Prism;
 			packageProductDependencies = (
@@ -148,6 +218,10 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
+					1150A7773A82D5813CC29F16 = {
+						DevelopmentTeam = 858878N47M;
+						ProvisioningStyle = Automatic;
+					};
 					CDFC0F00FA9F3945D4407FE1 = {
 						DevelopmentTeam = 858878N47M;
 						ProvisioningStyle = Automatic;
@@ -172,6 +246,7 @@
 			projectRoot = "";
 			targets = (
 				CDFC0F00FA9F3945D4407FE1 /* Prism */,
+				1150A7773A82D5813CC29F16 /* PrismWidget */,
 			);
 		};
 /* End PBXProject section */
@@ -194,9 +269,11 @@
 			files = (
 				61C14F92F5E19AD247115B66 /* AppState.swift in Sources */,
 				A6E821D417A39F86FEE743D3 /* AudioRecorder.swift in Sources */,
+				6ABE2964DB4D5B87E7C858F1 /* BiometricLock.swift in Sources */,
 				8C3819507DE7FD87AA8679F9 /* ChatView.swift in Sources */,
 				898BA0DED59FDABB75D032A7 /* EnrollView.swift in Sources */,
 				D7AF72B123245E304C361EC1 /* Haptics.swift in Sources */,
+				04B9CBBF92D60EB6483FE5B5 /* LivePCMCapture.swift in Sources */,
 				33360F83FD87F9DD968DFA2F /* LoginView.swift in Sources */,
 				F8CA0D87C3AAE424FB53327F /* MediaGenerateView.swift in Sources */,
 				16D11E1C37D023255B71B397 /* ModelPickerView.swift in Sources */,
@@ -204,6 +281,7 @@
 				51A7DFE10E20F58251B37E68 /* MusicGenerateView.swift in Sources */,
 				57305F9F30C177CBAB68B148 /* OnboardingView.swift in Sources */,
 				C6F007D55BBA410ABB9E2DF1 /* PrismApp.swift in Sources */,
+				F35283735B0CA3C79A42F95D /* PrismIntents.swift in Sources */,
 				15F542070E4ECF32304AE4D4 /* RootView.swift in Sources */,
 				DF8F9E7B6ADC379B646D172C /* SessionListView.swift in Sources */,
 				B9DEEA98E63BEE7F2FC9A6EE /* SettingsView.swift in Sources */,
@@ -213,13 +291,50 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		8C628C974D5E5056332FEEBC /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				92413ACF4D481B527D0488B0 /* PrismWidget.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		35FF1DC01377734ED45A0018 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1150A7773A82D5813CC29F16 /* PrismWidget */;
+			targetProxy = 38F085BB6F98F2A4B5164278 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		22CEFA46D54A4576B0425F6A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Widget/PrismWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 16;
+				DEVELOPMENT_TEAM = 858878N47M;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Widget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				MARKETING_VERSION = 0.8.4;
+				PRODUCT_BUNDLE_IDENTIFIER = org.skyphusion.prism.widget;
+				PRODUCT_NAME = PrismWidget;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 		4E8AB6C50D8E6B5B2BBD9220 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/Prism.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 858878N47M;
@@ -227,6 +342,7 @@
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Prism;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take a photo to attach for vision chat or image-to-video.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Unlock Prism when biometric lock is enabled.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Record audio to transcribe with speech-to-text models.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Save generated images to your photo library.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Attach photos as reference images for image-to-image and image-to-video.";
@@ -282,7 +398,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 15;
+				CURRENT_PROJECT_VERSION = 16;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = 858878N47M;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -303,7 +419,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 0.8.3;
+				MARKETING_VERSION = 0.8.4;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -350,7 +466,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 15;
+				CURRENT_PROJECT_VERSION = 16;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = 858878N47M;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -365,7 +481,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 0.8.3;
+				MARKETING_VERSION = 0.8.4;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -376,10 +492,31 @@
 			};
 			name = Release;
 		};
+		FA58EB573CC2003904808F32 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Widget/PrismWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 16;
+				DEVELOPMENT_TEAM = 858878N47M;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Widget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				MARKETING_VERSION = 0.8.4;
+				PRODUCT_BUNDLE_IDENTIFIER = org.skyphusion.prism.widget;
+				PRODUCT_NAME = PrismWidget;
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
 		FD67B5E1F87349514CB2796D /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/Prism.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 858878N47M;
@@ -387,6 +524,7 @@
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Prism;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take a photo to attach for vision chat or image-to-video.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Unlock Prism when biometric lock is enabled.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Record audio to transcribe with speech-to-text models.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Save generated images to your photo library.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Attach photos as reference images for image-to-image and image-to-video.";
@@ -415,6 +553,15 @@
 			buildConfigurations = (
 				982D6354F7A0E5E91097D64D /* Debug */,
 				F77B2C4C002B81D994EADF5F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		953DDB88DADBCD6792ACD827 /* Build configuration list for PBXNativeTarget "PrismWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FA58EB573CC2003904808F32 /* Debug */,
+				22CEFA46D54A4576B0425F6A /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

@@ -5,7 +5,7 @@ where possible; App Store Connect API key is already registered (`asc auth statu
 
 App: **Prism** (`org.skyphusion.prism`, ASC id `6798391677`).  
 Signing Team ID: `858878N47M` (personal Apple Developer Program membership -- not a
-separate "skyphusion" org team). Kit **0.8.3+**.
+separate "skyphusion" org team). Kit **0.8.4+**.
 
 ASC CLI credential name `skyphusion` is only the local key label; App Store Connect
 and code signing both hang off the personal account that owns that Team ID.

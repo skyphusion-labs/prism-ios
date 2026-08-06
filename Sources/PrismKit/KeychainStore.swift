@@ -28,6 +28,12 @@ public enum SecretStoreKeys {
   public static let selectedMusicModel = "org.skyphusion.prism.pref.music-model"
   public static let useStream = "org.skyphusion.prism.pref.use-stream"
   public static let hideUnspendable = "org.skyphusion.prism.pref.hide-unspendable"
+  /// Require Face ID / Touch ID when opening the app with a stored device key.
+  public static let biometricLockEnabled = "org.skyphusion.prism.pref.biometric-lock"
+  /// App Group key for widget balance (UserDefaults suite, not Keychain).
+  public static let appGroupId = "group.org.skyphusion.prism"
+  public static let widgetBalanceKey = "widget.balance"
+  public static let widgetUpdatedAtKey = "widget.updatedAt"
 }
 
 /// In-memory store (tests + Linux).

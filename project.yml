@@ -14,8 +14,8 @@ packages:
 settings:
   base:
     SWIFT_VERSION: "5.9"
-    MARKETING_VERSION: "0.8.3"
-    CURRENT_PROJECT_VERSION: "15"
+    MARKETING_VERSION: "0.8.4"
+    CURRENT_PROJECT_VERSION: "16"
     # Personal Apple Developer Program Team ID (individual membership, not an org)
     DEVELOPMENT_TEAM: "858878N47M"
     CODE_SIGN_STYLE: Automatic
@@ -34,6 +34,9 @@ targets:
     dependencies:
       - package: PrismKitLocal
         product: PrismKit
+      - target: PrismWidget
+    entitlements:
+      path: App/Prism.entitlements
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.skyphusion.prism
@@ -50,9 +53,11 @@ targets:
         INFOPLIST_KEY_NSPhotoLibraryUsageDescription: "Attach photos as reference images for image-to-image and image-to-video."
         INFOPLIST_KEY_NSMicrophoneUsageDescription: "Record audio to transcribe with speech-to-text models."
         INFOPLIST_KEY_NSCameraUsageDescription: "Take a photo to attach for vision chat or image-to-video."
+        INFOPLIST_KEY_NSFaceIDUsageDescription: "Unlock Prism when biometric lock is enabled."
         GENERATE_INFOPLIST_FILE: YES
         SWIFT_EMIT_LOC_STRINGS: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_ENTITLEMENTS: App/Prism.entitlements
     info:
       path: App/Info.plist
       properties:
@@ -63,12 +68,47 @@ targets:
         NSPhotoLibraryUsageDescription: "Attach photos as reference images for image-to-image and image-to-video."
         NSMicrophoneUsageDescription: "Record audio to transcribe with speech-to-text models."
         NSCameraUsageDescription: "Take a photo to attach for vision chat or image-to-video."
+        NSFaceIDUsageDescription: "Unlock Prism when biometric lock is enabled."
+
+  PrismWidget:
+    type: app-extension
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - path: Widget
+        excludes:
+          - Info.plist
+    entitlements:
+      path: Widget/PrismWidget.entitlements
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: org.skyphusion.prism.widget
+        PRODUCT_NAME: PrismWidget
+        DEVELOPMENT_TEAM: "858878N47M"
+        CODE_SIGN_STYLE: Automatic
+        TARGETED_DEVICE_FAMILY: "1,2"
+        MARKETING_VERSION: "0.8.4"
+        CURRENT_PROJECT_VERSION: "16"
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_ENTITLEMENTS: Widget/PrismWidget.entitlements
+        SKIP_INSTALL: YES
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"
+    info:
+      path: Widget/Info.plist
+      properties:
+        CFBundleDisplayName: Prism
+        CFBundlePackageType: XPC!
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
 
 schemes:
   Prism:
     build:
       targets:
         Prism: all
+        PrismWidget: all
     run:
       config: Debug
       # Local IAP testing without App Store sandbox account
