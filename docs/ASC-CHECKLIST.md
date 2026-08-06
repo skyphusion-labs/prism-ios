@@ -8,7 +8,7 @@ Use `asc` for API work; dashboard only for agreement/tax that CLI cannot do.
 
 | Item | Status / action |
 | --- | --- |
-| Bundle ID | `org.skyphusion.prism` (seed `858878N47M`) |
+| Bundle ID | `org.skyphusion.prism` (personal Team seed `858878N47M`) |
 | App record | Exists as "Prism - prism" |
 | IAP consumables | `org.skyphusion.prism.credit.{5,20,50}` READY_TO_SUBMIT |
 | Privacy nutrition labels | Declare network; no tracking if true; photo library for refs/save |

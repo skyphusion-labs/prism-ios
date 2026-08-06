@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Build an App Store archive of Prism for TestFlight upload.
-# Requires: Xcode, valid Apple Development/Distribution identity, team 858878N47M.
+# Requires: Xcode + personal Apple Developer Program signing
+#   Team ID 858878N47M (individual membership; not an org "skyphusion" team).
+#   DEVELOPMENT_TEAM is set in project.yml to the same value.
 #
 # Usage:
 #   ./scripts/archive-testflight.sh
@@ -40,7 +42,7 @@ xcodegen generate
 mkdir -p "$ARCHIVE_DIR"
 
 echo "==> archive $SCHEME → $ARCHIVE_PATH"
-# Automatic signing; team from project.yml DEVELOPMENT_TEAM.
+# Automatic signing under personal Team 858878N47M (project.yml DEVELOPMENT_TEAM).
 xcrun xcodebuild \
   -scheme "$SCHEME" \
   -project Prism.xcodeproj \
