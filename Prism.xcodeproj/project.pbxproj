@@ -21,6 +21,7 @@
 		A6E821D417A39F86FEE743D3 /* AudioRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF2A06FA03AA3BC3922B359C /* AudioRecorder.swift */; };
 		B9DEEA98E63BEE7F2FC9A6EE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E02BE541FF59B758F2AECB0 /* SettingsView.swift */; };
 		C6F007D55BBA410ABB9E2DF1 /* PrismApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4115D7B498B51A37C0C1059 /* PrismApp.swift */; };
+		D792430386F27A695D5F9858 /* MoreHubView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF2166C757BF46326F065EC8 /* MoreHubView.swift */; };
 		D7AF72B123245E304C361EC1 /* Haptics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38DDFCFF6BA022D56B751299 /* Haptics.swift */; };
 		DF8F9E7B6ADC379B646D172C /* SessionListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63C1660433159F3E5363F65D /* SessionListView.swift */; };
 		E72183EE09D6643B45C7A504 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 20325D4A56CE1D2FAD548CC0 /* Assets.xcassets */; };
@@ -42,6 +43,7 @@
 		94567EB75BC9121E95247AB1 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		AF2A06FA03AA3BC3922B359C /* AudioRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorder.swift; sourceTree = "<group>"; };
 		B380EA7A1F0D104D733EB197 /* MediaGenerateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaGenerateView.swift; sourceTree = "<group>"; };
+		BF2166C757BF46326F065EC8 /* MoreHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoreHubView.swift; sourceTree = "<group>"; };
 		C4115D7B498B51A37C0C1059 /* PrismApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrismApp.swift; sourceTree = "<group>"; };
 		DE0FF3705A3645B3B6397E38 /* SpeechGenerateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechGenerateView.swift; sourceTree = "<group>"; };
 		F65D9A85386E8EFA1A6D0C70 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
@@ -82,6 +84,7 @@
 				94567EB75BC9121E95247AB1 /* LoginView.swift */,
 				B380EA7A1F0D104D733EB197 /* MediaGenerateView.swift */,
 				80E2E3B365ADCF50760B2280 /* ModelPickerView.swift */,
+				BF2166C757BF46326F065EC8 /* MoreHubView.swift */,
 				25B6C246B14B32BEDBDDC7DE /* MusicGenerateView.swift */,
 				303C401457C10158AA627CEB /* OnboardingView.swift */,
 				C4115D7B498B51A37C0C1059 /* PrismApp.swift */,
@@ -194,6 +197,7 @@
 				33360F83FD87F9DD968DFA2F /* LoginView.swift in Sources */,
 				F8CA0D87C3AAE424FB53327F /* MediaGenerateView.swift in Sources */,
 				16D11E1C37D023255B71B397 /* ModelPickerView.swift in Sources */,
+				D792430386F27A695D5F9858 /* MoreHubView.swift in Sources */,
 				51A7DFE10E20F58251B37E68 /* MusicGenerateView.swift in Sources */,
 				57305F9F30C177CBAB68B148 /* OnboardingView.swift in Sources */,
 				C6F007D55BBA410ABB9E2DF1 /* PrismApp.swift in Sources */,
@@ -273,7 +277,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 12;
+				CURRENT_PROJECT_VERSION = 13;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = 858878N47M;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -294,7 +298,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 0.8.0;
+				MARKETING_VERSION = 0.8.1;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -341,7 +345,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 12;
+				CURRENT_PROJECT_VERSION = 13;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = 858878N47M;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -356,7 +360,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 0.8.0;
+				MARKETING_VERSION = 0.8.1;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";

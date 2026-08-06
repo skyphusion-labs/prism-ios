@@ -25,6 +25,7 @@ Use `asc` for API work; dashboard only for agreement/tax that CLI cannot do.
 
 - `NSPhotoLibraryUsageDescription` -- reference images for i2i / i2v  
 - `NSPhotoLibraryAddUsageDescription` -- save generated images  
+- `NSMicrophoneUsageDescription` -- STT recording (Audio → Transcribe)  
 
 ## API keys (local only)
 

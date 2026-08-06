@@ -15,7 +15,7 @@ struct RootView: View {
       } else if state.needsPlaneEnroll {
         OnboardingView()
       } else if state.backend == .controlPlane {
-        // Plane: chat + image + video + audio (TTS/STT) + music
+        // Primary doors on the bar; Audio/Music under More (readable tab bar).
         TabView {
           NavigationStack {
             ChatView()
@@ -37,16 +37,10 @@ struct RootView: View {
           .tabItem { Label("Video", systemImage: "film") }
 
           NavigationStack {
-            SpeechGenerateView()
+            MoreHubView()
               .toolbar { settingsLink }
           }
-          .tabItem { Label("Audio", systemImage: "waveform") }
-
-          NavigationStack {
-            MusicGenerateView()
-              .toolbar { settingsLink }
-          }
-          .tabItem { Label("Music", systemImage: "music.note") }
+          .tabItem { Label("More", systemImage: "ellipsis.circle") }
         }
       } else {
         NavigationStack {
