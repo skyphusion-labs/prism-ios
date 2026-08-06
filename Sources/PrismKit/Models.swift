@@ -656,6 +656,37 @@ public struct VideoGenerationResponse: Codable, Sendable, Equatable {
   public let error: ControlPlaneErrorBody?
 }
 
+// MARK: - Control plane TTS (`POST /v1/audio/speech`)
+
+/// `POST /v1/audio/speech` body. Plane accepts `input` or `text`.
+public struct SpeechGenerationRequest: Codable, Sendable, Equatable {
+  public var model: String
+  public var input: String
+
+  public init(model: String, input: String) {
+    self.model = model
+    self.input = input
+  }
+}
+
+/// Plane TTS envelope: base64 audio (typically mp3).
+public struct SpeechGenerationResponse: Codable, Sendable, Equatable {
+  public let model: String?
+  public let audio_base64: String?
+  public let format: String?
+  public let error: ControlPlaneErrorBody?
+
+  /// Decoded audio bytes when `audio_base64` is present.
+  public var audioData: Data? {
+    guard let raw = audio_base64, !raw.isEmpty else { return nil }
+    var s = raw
+    if let r = s.range(of: "base64,") {
+      s = String(s[r.upperBound...])
+    }
+    return Data(base64Encoded: s, options: .ignoreUnknownCharacters)
+  }
+}
+
 public struct HealthResponse: Codable, Sendable, Equatable {
   public let ok: Bool
   public let ts: Int?

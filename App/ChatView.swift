@@ -8,6 +8,7 @@ struct ChatView: View {
   @EnvironmentObject private var state: AppState
   @FocusState private var draftFocused: Bool
   @State private var sharePayload: ShareTextPayload?
+  @State private var showSessions = false
 
   var body: some View {
     VStack(spacing: 0) {
@@ -54,8 +55,15 @@ struct ChatView: View {
                 canRegenerate: state.canRegenerateLastReply
                   && turn.id == state.turns.last?.id
                   && turn.role == .assistant,
+                canSpeak: state.canUseMediaDoors
+                  && !state.speechModels.isEmpty
+                  && turn.role == .assistant
+                  && !turn.text.isEmpty
+                  && !turn.text.hasPrefix("(error)")
+                  && !turn.text.hasPrefix("(cancelled)"),
                 onUseAsDraft: { state.useTurnAsDraft(turn) },
-                onRegenerate: { state.regenerateLastReply() }
+                onRegenerate: { state.regenerateLastReply() },
+                onSpeak: { state.speakText(turn.text) }
               )
               .id(turn.id)
             }
@@ -144,13 +152,22 @@ struct ChatView: View {
     }
     .toolbar {
       ToolbarItem(placement: .topBarLeading) {
-        Button("New chat") {
+        Button {
+          showSessions = true
+        } label: {
+          Image(systemName: "list.bullet")
+        }
+        .accessibilityLabel("Chat list")
+        .accessibilityHint("Open saved conversations")
+      }
+      ToolbarItem(placement: .topBarLeading) {
+        Button("New") {
           state.newChat()
           Haptics.light()
         }
         .disabled(state.turns.isEmpty && state.conversationId == nil)
         .accessibilityLabel("Start new chat")
-        .accessibilityHint("Clears conversation context")
+        .accessibilityHint("Saves current chat and opens a blank one")
       }
       if state.canRegenerateLastReply {
         ToolbarItem(placement: .topBarTrailing) {
@@ -199,6 +216,12 @@ struct ChatView: View {
       #else
       Text(payload.text)
       #endif
+    }
+    .sheet(isPresented: $showSessions) {
+      NavigationStack {
+        SessionListView()
+      }
+      .environmentObject(state)
     }
   }
 
@@ -278,8 +301,10 @@ private struct TurnBubble: View {
   let turn: ChatTurn
   var isStreaming: Bool = false
   var canRegenerate: Bool = false
+  var canSpeak: Bool = false
   var onUseAsDraft: (() -> Void)?
   var onRegenerate: (() -> Void)?
+  var onSpeak: (() -> Void)?
 
   var body: some View {
     HStack {
@@ -338,6 +363,11 @@ private struct TurnBubble: View {
           if canRegenerate {
             Button("Regenerate") {
               onRegenerate?()
+            }
+          }
+          if canSpeak {
+            Button("Speak") {
+              onSpeak?()
             }
           }
         }
