@@ -86,7 +86,7 @@ extension PrismError: LocalizedError {
       {
         return "This model needs a reference image. Add a photo or https/data URL, or pick a text-only model (Veo / Seedance)."
       }
-      return message
+      return redactSecrets(message)
     case "upstream_timeout":
       return "Generation timed out. Retry, or use Seedance Fast / Veo Fast."
     case "upstream_error":
@@ -98,14 +98,14 @@ extension PrismError: LocalizedError {
       {
         return "Grok video needs plane 0.4.14+ (ZDR upload path). Update play-proxy, or use Veo / Seedance Fast."
       }
-      return message
+      return redactSecrets(message)
     case "unavailable":
-      return message
+      return redactSecrets(message)
     default:
       if let httpStatus, (402...402).contains(httpStatus) {
         return mapHttp(code: httpStatus, message: message)
       }
-      return message.isEmpty ? code : message
+      return message.isEmpty ? code : redactSecrets(message)
     }
   }
 
@@ -123,10 +123,30 @@ extension PrismError: LocalizedError {
     if lower.contains("upload_url") || lower.contains("zero data retention") {
       return "Grok video needs plane 0.4.14+ (ZDR upload path). Prefer Veo / Seedance Fast until then."
     }
+    if lower.contains("invalid or expired media") || lower.contains("media download token")
+      || lower.contains("media upload token")
+    {
+      return "Media link expired. Generate again to get a fresh download URL."
+    }
     if lower.contains("cancel") {
       return "Cancelled."
     }
-    return message
+    return redactSecrets(message)
+  }
+
+  /// Never surface device keys or long secrets in UI copy.
+  public static func redactSecrets(_ message: String) -> String {
+    var s = message
+    // pcp_<id>_<secret>
+    if let re = try? NSRegularExpression(pattern: #"pcp_[A-Za-z0-9._-]{8,}"#, options: []) {
+      let range = NSRange(s.startIndex..<s.endIndex, in: s)
+      s = re.stringByReplacingMatches(in: s, options: [], range: range, withTemplate: "pcp_…")
+    }
+    if let re = try? NSRegularExpression(pattern: #"Bearer\s+\S+"#, options: [.caseInsensitive]) {
+      let range = NSRange(s.startIndex..<s.endIndex, in: s)
+      s = re.stringByReplacingMatches(in: s, options: [], range: range, withTemplate: "Bearer …")
+    }
+    return s
   }
 
   private static func parsePlaneError(_ raw: String) -> (code: String, message: String)? {

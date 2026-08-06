@@ -74,6 +74,8 @@ struct MediaGenerateView: View {
         Section {
           TextField(kind == .image ? "Image prompt" : "Video prompt", text: promptBinding, axis: .vertical)
             .lineLimit(3...8)
+            .font(.body)
+            .accessibilityLabel(kind == .image ? "Image prompt" : "Video prompt")
 
           if kind == .image, selectedImageAcceptsRef {
             refSection
@@ -82,13 +84,32 @@ struct MediaGenerateView: View {
             videoRefSection
           }
 
+          if let preview = kind == .image ? state.imageSpendPreview : state.videoSpendPreview {
+            Text(preview)
+              .font(.footnote)
+              .foregroundStyle(.secondary)
+              .accessibilityLabel(preview)
+          }
+
           if state.mediaBusy {
+            HStack {
+              ProgressView()
+              Text(elapsedLabel)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+                .monospacedDigit()
+              Spacer()
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Generating, \(state.mediaElapsedSeconds) seconds elapsed")
             Button(role: .destructive) {
               state.cancelMedia()
             } label: {
               Text("Cancel generation")
                 .frame(maxWidth: .infinity)
+                .frame(minHeight: 44)
             }
+            .accessibilityLabel("Cancel generation")
           } else {
             Button {
               if kind == .image {
@@ -99,8 +120,24 @@ struct MediaGenerateView: View {
             } label: {
               Text(kind == .image ? "Generate image" : "Generate video")
                 .frame(maxWidth: .infinity)
+                .frame(minHeight: 44)
             }
             .disabled(!state.canUseMediaDoors || modelsForKind.isEmpty)
+            .accessibilityLabel(kind == .image ? "Generate image" : "Generate video")
+
+            if kind == .video, state.mediaError != nil,
+               !state.videoPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || !state.videoImageRef.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            {
+              Button {
+                state.retryLastVideo()
+              } label: {
+                Label("Retry video (same prompt)", systemImage: "arrow.clockwise")
+                  .frame(maxWidth: .infinity)
+                  .frame(minHeight: 44)
+              }
+              .accessibilityLabel("Retry video with same prompt")
+            }
           }
         } header: {
           Text("Prompt")
@@ -125,6 +162,37 @@ struct MediaGenerateView: View {
 
         if kind == .video, let urlStr = state.lastVideoURL {
           videoResultSection(urlStr)
+        }
+
+        let history = state.mediaHistory.filter { $0.kind == (kind == .image ? .image : .video) }
+        if !history.isEmpty {
+          Section {
+            ForEach(history) { item in
+              Button {
+                state.restoreMediaHistoryItem(item)
+              } label: {
+                VStack(alignment: .leading, spacing: 2) {
+                  Text(item.model)
+                    .font(.caption)
+                    .foregroundStyle(.primary)
+                  Text(item.prompt)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                  Text(item.createdAt.formatted(date: .omitted, time: .shortened))
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(minHeight: 44)
+              }
+              .accessibilityLabel("Restore \(item.kind.rawValue) from \(item.model)")
+            }
+          } header: {
+            Text("History (this session)")
+          } footer: {
+            Text("Newest first. Tap to restore as current result / prompt. Not saved across launches.")
+          }
         }
       }
     }
@@ -265,6 +333,16 @@ struct MediaGenerateView: View {
     } header: {
       Text("Result")
     }
+  }
+
+  private var elapsedLabel: String {
+    let s = state.mediaElapsedSeconds
+    let m = s / 60
+    let r = s % 60
+    if m > 0 {
+      return String(format: "Elapsed %d:%02d · often 1–3 min for video", m, r)
+    }
+    return "Elapsed \(s)s" + (kind == .video ? " · often 1–3 min" : "")
   }
 
   private var modelsForKind: [ModelEntry] {

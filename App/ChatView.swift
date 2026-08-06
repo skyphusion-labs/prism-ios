@@ -43,10 +43,23 @@ struct ChatView: View {
       }
 
       if let err = state.errorMessage {
-        Text(err)
-          .font(.footnote)
-          .foregroundStyle(.red)
-          .padding(.horizontal)
+        VStack(alignment: .leading, spacing: 6) {
+          Text(err)
+            .font(.footnote)
+            .foregroundStyle(.red)
+            .fixedSize(horizontal: false, vertical: true)
+          if state.canRetryLastChat, !state.isBusy {
+            Button {
+              state.retryLastFailedChat()
+            } label: {
+              Label("Retry last message", systemImage: "arrow.clockwise")
+                .font(.footnote.weight(.semibold))
+                .frame(minHeight: 44)
+            }
+            .accessibilityLabel("Retry last failed message")
+          }
+        }
+        .padding(.horizontal)
       }
 
       Divider()
@@ -55,8 +68,10 @@ struct ChatView: View {
         TextField("Message", text: $state.draft, axis: .vertical)
           .lineLimit(1...6)
           .textFieldStyle(.roundedBorder)
+          .font(.body)
           .focused($draftFocused)
           .disabled(state.isBusy)
+          .accessibilityLabel("Message")
           .onSubmit {
             state.send()
           }
@@ -68,16 +83,19 @@ struct ChatView: View {
             Image(systemName: "stop.circle.fill")
               .font(.title2)
               .foregroundStyle(.red)
+              .frame(minWidth: 44, minHeight: 44)
           }
-          .accessibilityLabel("Cancel")
+          .accessibilityLabel("Cancel generation")
         } else {
           Button {
             state.send()
           } label: {
             Image(systemName: "arrow.up.circle.fill")
               .font(.title2)
+              .frame(minWidth: 44, minHeight: 44)
           }
           .disabled(state.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+          .accessibilityLabel("Send message")
         }
       }
       .padding()
@@ -88,6 +106,8 @@ struct ChatView: View {
           state.newChat()
         }
         .disabled(state.turns.isEmpty && state.conversationId == nil)
+        .accessibilityLabel("Start new chat")
+        .accessibilityHint("Clears conversation context")
       }
       if state.backend == .playground, state.authenticated {
         ToolbarItem(placement: .topBarTrailing) {
@@ -131,6 +151,7 @@ private struct TurnBubble: View {
             Text(turn.text)
           }
         }
+        .font(.body)
         .textSelection(.enabled)
         .padding(10)
         .background(turn.role == .user ? Color.accentColor.opacity(0.15) : Color.secondary.opacity(0.12))
