@@ -88,6 +88,28 @@ struct SettingsView: View {
         Text("Unlocks playground backend and base-URL overrides. Product default is Control plane.")
       }
 
+      Section {
+        Link(destination: URL(string: "https://skyphusion.org")!) {
+          Label("skyphusion.org", systemImage: "globe")
+        }
+        Link(destination: URL(string: "https://skyphusion.org/privacy.html")!) {
+          Label("Privacy policy", systemImage: "hand.raised")
+        }
+        Link(destination: URL(string: "https://play.skyphusion.org")!) {
+          Label("Prism playground (web)", systemImage: "macwindow")
+        }
+        Link(destination: URL(string: "https://status.skyphusion.org")!) {
+          Label("Status", systemImage: "heart.text.square")
+        }
+        Link(destination: URL(string: "mailto:support@skyphusion.org")!) {
+          Label("support@skyphusion.org", systemImage: "envelope")
+        }
+      } header: {
+        Text("About")
+      } footer: {
+        Text("Prism is an AGPL product of SkyPhusion Labs. Kit \(PrismKit.version).")
+      }
+
       if let err = state.errorMessage {
         Section {
           Text(err).foregroundStyle(.red).font(.footnote)

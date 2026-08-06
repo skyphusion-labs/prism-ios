@@ -125,6 +125,18 @@ struct MediaGenerateView: View {
             .disabled(!state.canUseMediaDoors || modelsForKind.isEmpty)
             .accessibilityLabel(kind == .image ? "Generate image" : "Generate video")
 
+            if kind == .image, state.mediaError != nil,
+               !state.imagePrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            {
+              Button {
+                state.retryLastImage()
+              } label: {
+                Label("Retry image (same prompt)", systemImage: "arrow.clockwise")
+                  .frame(maxWidth: .infinity)
+                  .frame(minHeight: 44)
+              }
+              .accessibilityLabel("Retry image with same prompt")
+            }
             if kind == .video, state.mediaError != nil,
                !state.videoPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 || !state.videoImageRef.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -358,12 +370,12 @@ struct MediaGenerateView: View {
     case .image:
       return Binding(
         get: { state.selectedImageModelId ?? state.imageModels.first?.model ?? "" },
-        set: { state.selectedImageModelId = $0.isEmpty ? nil : $0 }
+        set: { state.selectImageModel($0) }
       )
     case .video:
       return Binding(
         get: { state.selectedVideoModelId ?? state.videoModels.first?.model ?? "" },
-        set: { state.selectedVideoModelId = $0.isEmpty ? nil : $0 }
+        set: { state.selectVideoModel($0) }
       )
     }
   }

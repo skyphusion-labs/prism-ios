@@ -285,6 +285,53 @@ final class AppState: ObservableObject {
     else { return }
     // Never clear turns / conversationId here -- that is only newChat().
     selectedModelId = modelId.isEmpty ? nil : modelId
+    persistUIPrefs()
+  }
+
+  func selectImageModel(_ modelId: String) {
+    selectedImageModelId = modelId.isEmpty ? nil : modelId
+    persistUIPrefs()
+  }
+
+  func selectVideoModel(_ modelId: String) {
+    selectedVideoModelId = modelId.isEmpty ? nil : modelId
+    persistUIPrefs()
+  }
+
+  func setUseStream(_ on: Bool) {
+    useStream = on
+    persistUIPrefs()
+  }
+
+  func setHideUnspendable(_ on: Bool) {
+    hideUnspendable = on
+    persistUIPrefs()
+  }
+
+  /// Put a past turn back into the draft (edit / re-ask).
+  func useTurnAsDraft(_ turn: ChatTurn) {
+    draft = turn.text
+  }
+
+  /// Plain-text transcript for share / copy.
+  func chatTranscriptText() -> String {
+    turns.compactMap { t -> String? in
+      let body = t.text.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !body.isEmpty else { return nil }
+      switch t.role {
+      case .user: return "You: \(body)"
+      case .assistant:
+        let who = t.modelLabel ?? t.modelId ?? "Prism"
+        return "\(who): \(body)"
+      case .system: return "System: \(body)"
+      }
+    }.joined(separator: "\n\n")
+  }
+
+  /// Re-run last image prompt/model after failure (mirrors video retry).
+  func retryLastImage() {
+    guard !imagePrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+    generateImage()
   }
 
   /// Unit-price preview for image/video generate (catalog `priceLabel`).
@@ -473,6 +520,21 @@ final class AppState: ObservableObject {
     if let dev = try? secrets.get("prism.showDeveloperSettings") {
       showDeveloperSettings = (dev == "1" || dev == "true")
     }
+    if let m = try? secrets.get(SecretStoreKeys.selectedChatModel), !m.isEmpty {
+      selectedModelId = m
+    }
+    if let m = try? secrets.get(SecretStoreKeys.selectedImageModel), !m.isEmpty {
+      selectedImageModelId = m
+    }
+    if let m = try? secrets.get(SecretStoreKeys.selectedVideoModel), !m.isEmpty {
+      selectedVideoModelId = m
+    }
+    if let s = try? secrets.get(SecretStoreKeys.useStream) {
+      useStream = (s == "1" || s == "true")
+    }
+    if let h = try? secrets.get(SecretStoreKeys.hideUnspendable) {
+      hideUnspendable = (h != "0" && h != "false")
+    }
   }
 
   func persistSettings() {
@@ -480,6 +542,14 @@ final class AppState: ObservableObject {
     try? secrets.set(baseURLString, for: SecretStoreKeys.playgroundBaseURL)
     try? secrets.set(controlPlaneURLString, for: SecretStoreKeys.controlPlaneBaseURL)
     try? secrets.set(showDeveloperSettings ? "1" : "0", for: "prism.showDeveloperSettings")
+  }
+
+  func persistUIPrefs() {
+    try? secrets.set(selectedModelId, for: SecretStoreKeys.selectedChatModel)
+    try? secrets.set(selectedImageModelId, for: SecretStoreKeys.selectedImageModel)
+    try? secrets.set(selectedVideoModelId, for: SecretStoreKeys.selectedVideoModel)
+    try? secrets.set(useStream ? "1" : "0", for: SecretStoreKeys.useStream)
+    try? secrets.set(hideUnspendable ? "1" : "0", for: SecretStoreKeys.hideUnspendable)
   }
 
   func setShowDeveloperSettings(_ on: Bool) {
@@ -612,7 +682,8 @@ final class AppState: ObservableObject {
   }
 
   private func pickDefaultModel() {
-    if selectedModelId == nil || !chatModels.contains(where: { $0.model == selectedModelId }) {
+    // Prefer persisted ids; only fill gaps or replace missing/unspendable-hidden models.
+    if selectedModelId == nil || !allChatModels.contains(where: { $0.model == selectedModelId }) {
       selectedModelId = chatModels.first(where: { $0.streaming == true })?.model
         ?? chatModels.first?.model
     }
@@ -633,6 +704,7 @@ final class AppState: ObservableObject {
         })?.model
         ?? videoModels.first?.model
     }
+    persistUIPrefs()
   }
 
   private func statusBannerPlayground(from res: ModelsResponse) -> String {

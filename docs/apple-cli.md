@@ -78,9 +78,9 @@ Rename in App Store Connect metadata later if you want a cleaner display name.
 
 ### In-app purchases (READY_TO_SUBMIT)
 
-Provisional consumable credit packs (USA base price). **Control-plane redeem still deferred**
-(store-receipt path parked on the plane contract). Client product ids are in
-`StoreProducts` / `Configuration.storekit`.
+Provisional consumable credit packs (USA base price). StoreKit 2 redeem is live on
+plane **0.4.15+** (`POST /v1/store/redeem` with signed transaction JWS). Client product
+ids are in `StoreProducts` / `Configuration.storekit`.
 
 | Product ID | ASC IAP id | USD | State |
 | --- | --- | --- | --- |
