@@ -1,5 +1,7 @@
 import SwiftUI
 import PrismKit
+import PhotosUI
+import AVKit
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -20,6 +22,8 @@ struct MediaGenerateView: View {
 
   let kind: Kind
   @EnvironmentObject private var state: AppState
+  @State private var photoItem: PhotosPickerItem?
+  @State private var sharePayload: SharePayload?
 
   var body: some View {
     VStack(spacing: 0) {
@@ -42,7 +46,11 @@ struct MediaGenerateView: View {
         }
 
         Section {
-          // Non-optional tags: Optional tags silently desync and fall back to first model (Veo).
+          if state.backend == .controlPlane {
+            TextField("Search models", text: $state.modelSearch)
+              .textInputAutocapitalization(.never)
+              .autocorrectionDisabled()
+          }
           Picker("Model", selection: nonOptionalModelBinding) {
             ForEach(modelsForKind) { m in
               Text(shortLabel(m)).tag(m.model)
@@ -55,7 +63,7 @@ struct MediaGenerateView: View {
               .textSelection(.enabled)
           }
           if modelsForKind.isEmpty, state.canUseMediaDoors {
-            Text("No \(kind.title.lowercased()) models in catalog. Refresh models in Settings.")
+            Text("No \(kind.title.lowercased()) models match. Clear search or refresh models in Settings.")
               .font(.footnote)
               .foregroundStyle(.secondary)
           }
@@ -66,37 +74,34 @@ struct MediaGenerateView: View {
         Section {
           TextField(kind == .image ? "Image prompt" : "Video prompt", text: promptBinding, axis: .vertical)
             .lineLimit(3...8)
-          // Only show image ref for models that accept it (i2i dual / required). Pure t2i hides the field.
+
           if kind == .image, selectedImageAcceptsRef {
-            TextField(imageRefPlaceholder, text: $state.imageImageRef, axis: .vertical)
-              .lineLimit(2...4)
-              .textInputAutocapitalization(.never)
-              .autocorrectionDisabled()
+            refSection
           }
           if kind == .video {
-            TextField("Optional image URL or data:… (i2v)", text: $state.videoImageRef, axis: .vertical)
-              .lineLimit(2...4)
-              .textInputAutocapitalization(.never)
-              .autocorrectionDisabled()
+            videoRefSection
           }
-          Button {
-            Task {
-              if kind == .image {
-                await state.generateImage()
-              } else {
-                await state.generateVideo()
-              }
-            }
-          } label: {
-            if state.mediaBusy {
-              ProgressView()
+
+          if state.mediaBusy {
+            Button(role: .destructive) {
+              state.cancelMedia()
+            } label: {
+              Text("Cancel generation")
                 .frame(maxWidth: .infinity)
-            } else {
+            }
+          } else {
+            Button {
+              if kind == .image {
+                state.generateImage()
+              } else {
+                state.generateVideo()
+              }
+            } label: {
               Text(kind == .image ? "Generate image" : "Generate video")
                 .frame(maxWidth: .infinity)
             }
+            .disabled(!state.canUseMediaDoors || modelsForKind.isEmpty)
           }
-          .disabled(state.mediaBusy || !state.canUseMediaDoors || modelsForKind.isEmpty)
         } header: {
           Text("Prompt")
         } footer: {
@@ -115,66 +120,151 @@ struct MediaGenerateView: View {
         }
 
         if kind == .image, state.lastImageBase64 != nil || state.lastImageURL != nil {
-          Section {
-            if let b64 = state.lastImageBase64, let uiImage = decodeImage(b64) {
-              Image(uiImage: uiImage)
-                .resizable()
-                .scaledToFit()
-                .frame(maxHeight: 360)
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            } else if let urlStr = state.lastImageURL, let url = URL(string: urlStr) {
-              AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let img):
-                  img.resizable().scaledToFit().frame(maxHeight: 360)
-                case .failure:
-                  Link("Open image URL", destination: url)
-                case .empty:
-                  ProgressView()
-                @unknown default:
-                  EmptyView()
-                }
-              }
-              Text(urlStr)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .textSelection(.enabled)
-            } else {
-              Text("Image payload present but could not render (not base64 and no URL).")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            }
-            if let model = state.lastImageModel {
-              Text(model).font(.caption2).foregroundStyle(.secondary)
-            }
-          } header: {
-            Text("Result")
-          }
+          imageResultSection
         }
 
         if kind == .video, let urlStr = state.lastVideoURL {
-          Section {
-            if let url = URL(string: urlStr), url.scheme?.hasPrefix("http") == true {
-              Link("Open video", destination: url)
-              Text(urlStr)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .textSelection(.enabled)
-            } else {
-              Text("Inline video asset (\(urlStr.prefix(48))…)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-            if let model = state.lastVideoModel {
-              Text(model).font(.caption2).foregroundStyle(.secondary)
-            }
-          } header: {
-            Text("Result")
-          }
+          videoResultSection(urlStr)
         }
       }
     }
     .navigationTitle(kind.title)
+    .onChange(of: photoItem) { item in
+      guard let item else { return }
+      Task {
+        if let data = try? await item.loadTransferable(type: Data.self) {
+          let mime = "image/jpeg"
+          if kind == .image {
+            state.setImageReferenceData(data, mime: mime)
+          } else {
+            state.setVideoReferenceData(data, mime: mime)
+          }
+        }
+        photoItem = nil
+      }
+    }
+    .sheet(item: $sharePayload) { payload in
+      ActivityView(items: payload.items)
+    }
+  }
+
+  @ViewBuilder
+  private var refSection: some View {
+    TextField(imageRefPlaceholder, text: $state.imageImageRef, axis: .vertical)
+      .lineLimit(2...4)
+      .textInputAutocapitalization(.never)
+      .autocorrectionDisabled()
+    PhotosPicker(selection: $photoItem, matching: .images) {
+      Label("Choose photo for reference", systemImage: "photo.on.rectangle")
+    }
+    if state.lastImageBase64 != nil || state.lastImageURL != nil {
+      Button("Use last result as reference") {
+        state.useLastImageAsReference(forVideo: false)
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var videoRefSection: some View {
+    TextField("Optional image URL or data:… (i2v)", text: $state.videoImageRef, axis: .vertical)
+      .lineLimit(2...4)
+      .textInputAutocapitalization(.never)
+      .autocorrectionDisabled()
+    PhotosPicker(selection: $photoItem, matching: .images) {
+      Label("Choose photo for i2v", systemImage: "photo.on.rectangle")
+    }
+    if state.lastImageBase64 != nil || state.lastImageURL != nil {
+      Button("Use last image as first frame") {
+        state.useLastImageAsReference(forVideo: true)
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var imageResultSection: some View {
+    Section {
+      if let b64 = state.lastImageBase64, let uiImage = decodeImage(b64) {
+        Image(uiImage: uiImage)
+          .resizable()
+          .scaledToFit()
+          .frame(maxHeight: 360)
+          .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        #if canImport(UIKit)
+        Button {
+          UIImageWriteToSavedPhotosAlbum(uiImage, nil, nil, nil)
+          state.mediaStatus = "Saved to Photos"
+        } label: {
+          Label("Save to Photos", systemImage: "square.and.arrow.down")
+        }
+        Button {
+          sharePayload = SharePayload(items: [uiImage])
+        } label: {
+          Label("Share", systemImage: "square.and.arrow.up")
+        }
+        #endif
+      } else if let urlStr = state.lastImageURL, let url = URL(string: urlStr) {
+        AsyncImage(url: url) { phase in
+          switch phase {
+          case .success(let img):
+            img.resizable().scaledToFit().frame(maxHeight: 360)
+          case .failure:
+            Link("Open image URL", destination: url)
+          case .empty:
+            ProgressView()
+          @unknown default:
+            EmptyView()
+          }
+        }
+        Text(urlStr)
+          .font(.caption2)
+          .foregroundStyle(.secondary)
+          .textSelection(.enabled)
+        Button {
+          sharePayload = SharePayload(items: [url])
+        } label: {
+          Label("Share URL", systemImage: "square.and.arrow.up")
+        }
+      } else {
+        Text("Image payload present but could not render.")
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+      }
+      if let model = state.lastImageModel {
+        Text(model).font(.caption2).foregroundStyle(.secondary)
+      }
+    } header: {
+      Text("Result")
+    }
+  }
+
+  @ViewBuilder
+  private func videoResultSection(_ urlStr: String) -> some View {
+    Section {
+      if let url = URL(string: urlStr), url.scheme?.hasPrefix("http") == true {
+        VideoPlayer(player: AVPlayer(url: url))
+          .frame(minHeight: 220)
+          .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        Link("Open in browser", destination: url)
+        Text(urlStr)
+          .font(.caption2)
+          .foregroundStyle(.secondary)
+          .textSelection(.enabled)
+        Button {
+          sharePayload = SharePayload(items: [url])
+        } label: {
+          Label("Share", systemImage: "square.and.arrow.up")
+        }
+      } else {
+        Text("Inline video asset (\(urlStr.prefix(48))…)")
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
+      if let model = state.lastVideoModel {
+        Text(model).font(.caption2).foregroundStyle(.secondary)
+      }
+    } header: {
+      Text("Result")
+    }
   }
 
   private var modelsForKind: [ModelEntry] {
@@ -209,12 +299,15 @@ struct MediaGenerateView: View {
 
   private func shortLabel(_ m: ModelEntry) -> String {
     let base = m.label ?? m.model
+    var parts = [base]
+    if let p = m.priceLabel { parts.append(p) }
     let caps = m.capabilities ?? []
-    if caps.contains("image-input-required") { return "\(base) · i2i only" }
-    if caps.contains("image-input"), (m.type == "image" || kind == .image) {
-      return "\(base) · i2i / +ref"
+    if caps.contains("image-input-required") {
+      parts.append("i2i only")
+    } else if caps.contains("image-input"), kind == .image {
+      parts.append("i2i / +ref")
     }
-    return base
+    return parts.joined(separator: " · ")
   }
 
   private var selectedImageAcceptsRef: Bool {
@@ -233,23 +326,23 @@ struct MediaGenerateView: View {
   private var imageFooter: String {
     let caps = state.selectedImageModel?.capabilities ?? []
     if caps.contains("image-input-required") {
-      return "This model is image-to-image only. Paste an https or data: reference above."
+      return "Image-to-image only. Use Choose photo or paste an https / data: URL."
     }
     if caps.contains("image-input") {
-      return "Dual-mode: works from prompt alone, or paste a reference for i2i/edit (Flux 2 multi-ref, nano-banana, gpt-image, Grok image). Prefer data: for Flux 2."
+      return "Dual-mode: prompt alone works, or attach a reference for i2i/edit. Prefer data: / photo for Flux 2."
     }
-    return "Pure text-to-image. Switch to a · i2i / +ref model to condition on a reference image."
+    return "Pure text-to-image. Switch to a · i2i / +ref model to condition on a reference."
   }
 
   private var videoFooter: String {
     let mid = state.selectedVideoModelId ?? ""
     if mid.hasPrefix("minimax/hailuo") {
-      return "Hailuo is image-to-video only: paste an https image URL above. For text-only use Veo or Seedance Fast."
+      return "Hailuo is image-to-video only: add a photo above. For text-only use Veo or Seedance Fast."
     }
     if mid.hasPrefix("xai/grok-imagine-video") {
-      return "Grok video still returns CF 7003 on this plane. Prefer google/veo-3.1-fast or bytedance/seedance-2.0-fast."
+      return "Grok video on plane 0.4.14+ uses a ZDR upload path (play-proxy media URL). Prefer Veo / Seedance Fast if it still fails."
     }
-    return "POST /v1/videos/generations. Veo and Seedance Fast are most reliable. Full Seedance may take up to ~3 min."
+    return "Veo and Seedance Fast are most reliable. Full Seedance may take up to ~3 min."
   }
 
   #if canImport(UIKit)
@@ -265,6 +358,27 @@ struct MediaGenerateView: View {
   private func decodeImage(_ b64: String) -> Never? { nil }
   #endif
 }
+
+/// Sheet payload for UIActivityViewController.
+private struct SharePayload: Identifiable {
+  let id = UUID()
+  let items: [Any]
+}
+
+#if canImport(UIKit)
+private struct ActivityView: UIViewControllerRepresentable {
+  let items: [Any]
+  func makeUIViewController(context: Context) -> UIActivityViewController {
+    UIActivityViewController(activityItems: items, applicationActivities: nil)
+  }
+  func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+#else
+private struct ActivityView: View {
+  let items: [Any]
+  var body: some View { Text("Share unavailable") }
+}
+#endif
 
 #Preview {
   NavigationStack {

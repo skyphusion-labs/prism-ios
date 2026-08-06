@@ -20,8 +20,29 @@ struct ModelPickerView: View {
           .foregroundStyle(.secondary)
       }
 
+      if state.backend == .controlPlane {
+        HStack {
+          Image(systemName: "magnifyingglass")
+            .foregroundStyle(.secondary)
+          TextField("Search models", text: $state.modelSearch)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+          if !state.modelSearch.isEmpty {
+            Button {
+              state.modelSearch = ""
+            } label: {
+              Image(systemName: "xmark.circle.fill")
+                .foregroundStyle(.secondary)
+            }
+          }
+        }
+        .font(.footnote)
+        Toggle("Hide unspendable", isOn: $state.hideUnspendable)
+          .font(.caption)
+      }
+
       if state.chatModels.isEmpty {
-        Text(state.isBusy ? "Loading models…" : "No chat models loaded. Check Settings / base URL.")
+        Text(state.isBusy ? "Loading models…" : emptyCopy)
           .font(.footnote)
           .foregroundStyle(.secondary)
       } else {
@@ -34,15 +55,30 @@ struct ModelPickerView: View {
           }
         }
         .pickerStyle(.menu)
+        if let sel = state.selectedModel {
+          Text(sel.model)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .textSelection(.enabled)
+        }
       }
     }
+  }
+
+  private var emptyCopy: String {
+    if !state.modelSearch.isEmpty {
+      return "No chat models match “\(state.modelSearch)”."
+    }
+    return "No chat models loaded. Check Settings / enroll."
   }
 
   private func label(for m: ModelEntry) -> String {
     var parts: [String] = []
     parts.append(m.label ?? m.model)
+    if let p = m.priceLabel { parts.append(p) }
     if m.streaming == true { parts.append("SSE") }
-    if let p = m.provider, !p.isEmpty { parts.append(p) }
+    if let g = m.group, !g.isEmpty { parts.append(g) }
+    if !m.isSpendable { parts.append("unspendable") }
     return parts.joined(separator: " · ")
   }
 }

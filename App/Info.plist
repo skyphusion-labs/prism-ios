@@ -20,6 +20,10 @@
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Save generated images to your photo library.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Attach photos as reference images for image-to-image and image-to-video.</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchScreen</key>

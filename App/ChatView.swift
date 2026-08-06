@@ -53,30 +53,38 @@ struct ChatView: View {
           .lineLimit(1...6)
           .textFieldStyle(.roundedBorder)
           .focused($draftFocused)
+          .disabled(state.isBusy)
           .onSubmit {
-            Task { await state.send() }
+            state.send()
           }
 
-        Button {
-          Task { await state.send() }
-        } label: {
-          if state.isBusy {
-            ProgressView()
-          } else {
+        if state.isBusy {
+          Button {
+            state.cancelChat()
+          } label: {
+            Image(systemName: "stop.circle.fill")
+              .font(.title2)
+              .foregroundStyle(.red)
+          }
+          .accessibilityLabel("Cancel")
+        } else {
+          Button {
+            state.send()
+          } label: {
             Image(systemName: "arrow.up.circle.fill")
               .font(.title2)
           }
+          .disabled(state.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         }
-        .disabled(state.isBusy || state.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
       }
       .padding()
     }
     .toolbar {
       ToolbarItem(placement: .topBarLeading) {
-        Button("Clear") {
-          state.clearChat()
+        Button("New chat") {
+          state.newChat()
         }
-        .disabled(state.turns.isEmpty)
+        .disabled(state.turns.isEmpty && state.conversationId == nil)
       }
       if state.backend == .playground, state.authenticated {
         ToolbarItem(placement: .topBarTrailing) {
