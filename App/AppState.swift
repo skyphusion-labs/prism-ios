@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import PrismKit
 import SwiftUI
 #if canImport(UIKit)
@@ -168,6 +169,8 @@ final class AppState: ObservableObject {
   /// Last plane `GET /health` probe (`nil` = not probed yet).
   @Published var planeHealthOK: Bool?
   @Published var planeHealthService: String?
+  /// Device has a usable network path (Wi-Fi / cellular).
+  @Published var isNetworkSatisfied: Bool = true
   /// Short label for Settings / empty states.
   var planeHealthLabel: String {
     guard backend == .controlPlane else { return "n/a" }
@@ -181,13 +184,30 @@ final class AppState: ObservableObject {
     }
   }
 
+  /// True when the last turn is an assistant reply we can re-run under the current model.
+  /// Control plane only: client owns the transcript. Playground history is server-side.
+  var canRegenerateLastReply: Bool {
+    guard backend == .controlPlane, !isBusy, canChat else { return false }
+    guard let last = turns.last, last.role == .assistant else { return false }
+    return turns.dropLast().last?.role == .user
+  }
+
   private let secrets: any SecretStore
   private var playground: PrismClient
   private var controlPlane: ControlPlaneClient
   private var chatTask: Task<Void, Never>?
   private var mediaTask: Task<Void, Never>?
   private var mediaTimerTask: Task<Void, Never>?
+  private var pathMonitor: NWPathMonitor?
   private static let mediaHistoryCap = 20
+
+  /// Empty-state chips; tapping fills the draft (user can edit before send).
+  static let starterPrompts: [String] = [
+    "Explain this simply, like I am new to the topic:",
+    "Summarize the following in three short bullets:",
+    "Write a clear product blurb (2 sentences) for:",
+    "List practical next steps to debug:",
+  ]
 
   init(secrets: (any SecretStore)? = nil) {
     let store = secrets ?? SecretStores.default()
@@ -196,6 +216,22 @@ final class AppState: ObservableObject {
     controlPlane = ControlPlaneClient()
     loadPersisted()
     rebuildClients(clearSession: false)
+    startNetworkMonitor()
+  }
+
+  deinit {
+    pathMonitor?.cancel()
+  }
+
+  private func startNetworkMonitor() {
+    let mon = NWPathMonitor()
+    mon.pathUpdateHandler = { [weak self] path in
+      Task { @MainActor in
+        self?.isNetworkSatisfied = path.status == .satisfied
+      }
+    }
+    mon.start(queue: DispatchQueue(label: "org.skyphusion.prism.net"))
+    pathMonitor = mon
   }
 
   private func appliesSpendableFilter(_ m: ModelEntry) -> Bool {
@@ -332,6 +368,44 @@ final class AppState: ObservableObject {
   func retryLastImage() {
     guard !imagePrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
     generateImage()
+  }
+
+  func clearImageReference() {
+    imageImageRef = ""
+  }
+
+  func clearVideoReference() {
+    videoImageRef = ""
+  }
+
+  /// Fill draft from an empty-state starter chip.
+  func applyStarterPrompt(_ text: String) {
+    draft = text
+    Haptics.light()
+  }
+
+  /// Clipboard → enrollment token field (token or full pcp_ key routed appropriately).
+  @discardableResult
+  func pasteEnrollmentFromClipboard() -> Bool {
+    #if canImport(UIKit)
+    guard let raw = UIPasteboard.general.string?.trimmingCharacters(in: .whitespacesAndNewlines),
+          !raw.isEmpty
+    else {
+      errorMessage = "Clipboard is empty."
+      return false
+    }
+    if raw.hasPrefix("pcp_") {
+      // Recovery path: save as device key instead of enrollment token.
+      Task { await saveDeviceKey(raw) }
+      return true
+    }
+    enrollmentToken = raw
+    errorMessage = nil
+    Haptics.light()
+    return true
+    #else
+    return false
+    #endif
   }
 
   /// Unit-price preview for image/video generate (catalog `priceLabel`).
@@ -851,7 +925,14 @@ final class AppState: ObservableObject {
 
   func send() {
     chatTask?.cancel()
-    chatTask = Task { await self.performSend() }
+    chatTask = Task { await self.performSend(mode: .newFromDraft) }
+  }
+
+  /// Drop the last assistant reply and re-run the last user turn under the current model.
+  func regenerateLastReply() {
+    guard canRegenerateLastReply else { return }
+    chatTask?.cancel()
+    chatTask = Task { await self.performSend(mode: .regenerateLast) }
   }
 
   func cancelChat() {
@@ -864,9 +945,12 @@ final class AppState: ObservableObject {
     errorMessage = PrismError.cancelled.userFacingMessage
   }
 
-  private func performSend() async {
-    let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !text.isEmpty else { return }
+  private enum SendMode {
+    case newFromDraft
+    case regenerateLast
+  }
+
+  private func performSend(mode: SendMode) async {
     guard let model = selectedModel else {
       errorMessage = "Pick a chat model first."
       return
@@ -878,9 +962,32 @@ final class AppState: ObservableObject {
         : "Sign in (or sign up) before chatting on the public playground."
       return
     }
+    if !isNetworkSatisfied {
+      errorMessage = "No network connection. Reconnect and try again."
+      Haptics.error()
+      return
+    }
 
-    draft = ""
-    turns.append(ChatTurn(role: .user, text: text))
+    let text: String
+    switch mode {
+    case .newFromDraft:
+      let t = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !t.isEmpty else { return }
+      text = t
+      draft = ""
+      turns.append(ChatTurn(role: .user, text: text))
+    case .regenerateLast:
+      // Pop trailing assistant shells until a user turn is last.
+      while let last = turns.last, last.role == .assistant {
+        turns.removeLast()
+      }
+      guard let user = turns.last, user.role == .user else {
+        errorMessage = "Nothing to regenerate."
+        return
+      }
+      text = user.text
+    }
+
     let assistantId = UUID()
     // Stamp the model now so mid-stream picker changes do not relabel this reply.
     turns.append(
@@ -902,6 +1009,7 @@ final class AppState: ObservableObject {
       switch backend {
       case .playground:
         // Server keeps history under conversationId; model can change per turn.
+        // Regenerate re-sends the same user text (new completion under current model).
         try await sendPlayground(model: model, userText: text, assistantId: assistantId)
       case .controlPlane:
         // Client resends full turns as messages; model is only the next completion's id.
@@ -1076,6 +1184,11 @@ final class AppState: ObservableObject {
       mediaError = "Control plane + device key required for image generation."
       return
     }
+    if !isNetworkSatisfied {
+      mediaError = "No network connection. Reconnect and try again."
+      Haptics.error()
+      return
+    }
     let prompt = imagePrompt.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !prompt.isEmpty else {
       mediaError = "Enter an image prompt."
@@ -1143,6 +1256,11 @@ final class AppState: ObservableObject {
   private func performGenerateVideo() async {
     guard canUseMediaDoors else {
       mediaError = "Control plane + device key required for video generation."
+      return
+    }
+    if !isNetworkSatisfied {
+      mediaError = "No network connection. Reconnect and try again."
+      Haptics.error()
       return
     }
     let prompt = videoPrompt.trimmingCharacters(in: .whitespacesAndNewlines)

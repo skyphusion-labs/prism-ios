@@ -44,6 +44,17 @@ struct RootView: View {
         }
       }
     }
+    .overlay(alignment: .top) {
+      if !state.isNetworkSatisfied, state.needsPlaneEnroll || state.needsPlaygroundLogin {
+        Text("Offline")
+          .font(.caption.weight(.semibold))
+          .foregroundStyle(.white)
+          .frame(maxWidth: .infinity)
+          .padding(.vertical, 6)
+          .background(Color.orange)
+          .accessibilityLabel("No network connection")
+      }
+    }
     .task {
       await state.bootstrap()
     }

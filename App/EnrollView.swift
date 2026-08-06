@@ -20,6 +20,14 @@ struct EnrollView: View {
           .textInputAutocapitalization(.never)
           .autocorrectionDisabled()
         Button {
+          _ = state.pasteEnrollmentFromClipboard()
+        } label: {
+          Label("Paste from clipboard", systemImage: "doc.on.clipboard")
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minHeight: 44)
+        }
+        .accessibilityLabel("Paste enrollment token or device key from clipboard")
+        Button {
           Task { await state.enrollPlane() }
         } label: {
           if state.isBusy {
@@ -37,7 +45,7 @@ struct EnrollView: View {
         Text("Control plane")
       } footer: {
         Text(
-          "Exchange a single-use enrollment token for a pcp_ device key. The key is stored in the Keychain and never shown again by the plane."
+          "Exchange a single-use enrollment token for a pcp_ device key. The key is stored in the Keychain and never shown again by the plane. If the clipboard already has a pcp_ key, Paste saves it directly."
         )
       }
 
