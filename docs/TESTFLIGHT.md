@@ -5,7 +5,7 @@ where possible; App Store Connect API key is already registered (`asc auth statu
 
 App: **Prism** (`org.skyphusion.prism`, ASC id `6798391677`).  
 Signing Team ID: `858878N47M` (personal Apple Developer Program membership -- not a
-separate "skyphusion" org team). Kit **0.8.1+**.
+separate "skyphusion" org team). Kit **0.8.2+**.
 
 ASC CLI credential name `skyphusion` is only the local key label; App Store Connect
 and code signing both hang off the personal account that owns that Team ID.
@@ -103,10 +103,21 @@ asc beta-groups list --app 6798391677
    - Pure t2i (flux-1-schnell).  
    - Dual model + Photos reference.  
    - Spend preview; Save to Photos + Share; history restore.
+3b. **Chat vision (0.8.2+)**  
+   - Attach a photo (paperclip/photo button); send with a short question.  
+   - Prefer a vision-capable chat model; reply references the image.  
+   - Plane **v0.4.23+** for multiparty image content on control-plane.
+3c. **Chat starters**  
+   - Empty chat starters are complete sentences (no trailing blank topic).  
+3d. **Fable + Stream**  
+   - Stream on, Claude Fable 5, short prompt → full reply (not empty/gateway error).  
+   - Plane **v0.4.22+**.
 4. **Video**  
-   - Veo Fast or Seedance Fast; elapsed timer.  
+   - Default model should prefer **Seedance** (not Hailuo).  
+   - Seedance Fast / Veo Fast; elapsed timer.  
+   - Hailuo without photo shows i2v footer.  
    - On failure, **Retry video** keeps prompt.  
-   - In-app player + share URL.
+   - In-app player + share URL. History: tap restore; Clear history.
 5. **More → Audio**  
    - Speak: short line → audio plays.  
    - Transcribe: record a few seconds → transcript; Use as chat draft.
@@ -115,6 +126,10 @@ asc beta-groups list --app 6798391677
 7. **More / Settings → Top-up** (sandbox Apple ID or Configuration.storekit Debug)  
    - Purchase credit pack → balance rises after `POST /v1/store/redeem`.  
    - Plane **v0.4.15+** required.
+7b. **Chat backup / sync (0.8.2+)**  
+   - Settings → Export local chats (JSON).  
+   - Playground: Chats list → Sync from playground cloud (signed in).  
+   - Control plane: no server chat store (privacy); local sessions only.
 8. **Keychain / offline**  
    - Kill app, relaunch: still enrolled.  
    - Airplane mode: offline banner; send blocked.

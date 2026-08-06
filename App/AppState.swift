@@ -21,6 +21,8 @@ struct ChatTurn: Identifiable, Equatable, Codable {
   /// Model that produced this assistant turn (nil for user / system).
   var modelId: String?
   var modelLabel: String?
+  /// Vision attachments for this turn (data:image/... URLs). User turns only.
+  var imageDataUrls: [String]?
 
   enum Role: String, Equatable, Codable {
     case user
@@ -33,13 +35,15 @@ struct ChatTurn: Identifiable, Equatable, Codable {
     role: Role,
     text: String,
     modelId: String? = nil,
-    modelLabel: String? = nil
+    modelLabel: String? = nil,
+    imageDataUrls: [String]? = nil
   ) {
     self.id = id
     self.role = role
     self.text = text
     self.modelId = modelId
     self.modelLabel = modelLabel
+    self.imageDataUrls = imageDataUrls
   }
 }
 
@@ -181,6 +185,8 @@ final class AppState: ObservableObject {
 
   @Published var turns: [ChatTurn] = []
   @Published var draft: String = ""
+  /// Pending chat image attachments (data URLs) for the next send.
+  @Published var draftImageDataUrls: [String] = []
   @Published var conversationId: String?
   @Published var useStream: Bool = true
   /// Active compact state (playground server or plane local).
@@ -307,12 +313,12 @@ final class AppState: ObservableObject {
   private static let mediaHistoryCap = 20
   private static let sessionCap = 50
 
-  /// Empty-state chips; tapping fills the draft (user can edit before send).
+  /// Empty-state chips; full self-contained prompts (never trailing blanks).
   static let starterPrompts: [String] = [
-    "Explain this simply, like I am new to the topic:",
-    "Summarize the following in three short bullets:",
-    "Write a clear product blurb (2 sentences) for:",
-    "List practical next steps to debug:",
+    "In plain language, explain how HTTPS keeps web traffic private.",
+    "Summarize the tradeoffs between SQL and document databases in three short bullets.",
+    "Write a two-sentence product blurb for a prepaid AI playground aimed at indie developers.",
+    "List five practical steps to debug a REST API that returns 502 only under load.",
   ]
 
   init(secrets: (any SecretStore)? = nil) {
@@ -552,6 +558,48 @@ final class AppState: ObservableObject {
   /// Fill draft from an empty-state starter chip.
   func applyStarterPrompt(_ text: String) {
     draft = text
+    Haptics.light()
+  }
+
+  /// Attach a photo (JPEG data URL) to the next chat send. Cap 3 images / ~3 MiB each.
+  func attachChatImageJPEGData(_ data: Data, maxBytes: Int = 3 * 1024 * 1024) {
+    guard draftImageDataUrls.count < 3 else {
+      errorMessage = "At most 3 images per message."
+      return
+    }
+    var jpeg = data
+    if jpeg.count > maxBytes {
+      #if canImport(UIKit)
+      if let img = UIImage(data: data),
+         let smaller = img.jpegData(compressionQuality: 0.6),
+         smaller.count <= maxBytes
+      {
+        jpeg = smaller
+      } else {
+        errorMessage = "Image is too large (max ~3 MB after compress)."
+        return
+      }
+      #else
+      errorMessage = "Image is too large (max ~3 MB)."
+      return
+      #endif
+    }
+    let b64 = jpeg.base64EncodedString()
+    draftImageDataUrls.append("data:image/jpeg;base64,\(b64)")
+    Haptics.light()
+  }
+
+  func removeDraftImage(at index: Int) {
+    guard draftImageDataUrls.indices.contains(index) else { return }
+    draftImageDataUrls.remove(at: index)
+  }
+
+  func clearDraftImages() {
+    draftImageDataUrls = []
+  }
+
+  func clearMediaHistory() {
+    mediaHistory = []
     Haptics.light()
   }
 
@@ -869,6 +917,93 @@ final class AppState: ObservableObject {
     conversationId = nil
     compactState = nil
     saveSessionsToDisk()
+  }
+
+  /// Pull playground server conversation list into the local session list (playground only).
+  @Published var serverSyncBusy = false
+  @Published var serverSyncMessage: String?
+
+  func syncPlaygroundConversations() async {
+    guard backend == .playground, authenticated else {
+      serverSyncMessage = "Sign in to the playground to sync cloud chats."
+      return
+    }
+    serverSyncBusy = true
+    serverSyncMessage = nil
+    defer { serverSyncBusy = false }
+    do {
+      let remote = try await playground.listConversations()
+      var imported = 0
+      for item in remote.prefix(40) {
+        let cid = item.conversation_id
+        if sessions.contains(where: { $0.conversationId == cid }) { continue }
+        let detail = try await playground.getConversation(id: cid)
+        if let err = detail.error, !err.isEmpty { continue }
+        var turns: [ChatTurn] = []
+        // Server rows are chat table rows: user_input + output per turn.
+        if let rows = detail.turns {
+          for row in rows {
+            let userIn = row.user_input ?? ""
+            let out = row.resolvedOutput ?? ""
+            if !userIn.isEmpty {
+              turns.append(ChatTurn(role: .user, text: userIn))
+            }
+            if !out.isEmpty {
+              turns.append(
+                ChatTurn(role: .assistant, text: out, modelId: row.model, modelLabel: row.model)
+              )
+            }
+          }
+        }
+        let title = item.first_input.map { t in
+          t.count <= 48 ? t : String(t.prefix(45)) + "..."
+        } ?? "Cloud chat"
+        let s = ChatSession(
+          title: title.isEmpty ? "Cloud chat" : title,
+          turns: turns,
+          conversationId: cid,
+          selectedModelId: item.latest_model,
+          compact: detail.compact
+        )
+        sessions.append(s)
+        imported += 1
+      }
+      sessions.sort { $0.updatedAt > $1.updatedAt }
+      trimSessions()
+      saveSessionsToDisk()
+      serverSyncMessage = imported == 0
+        ? "Already up to date with playground (\(remote.count) cloud chats)."
+        : "Imported \(imported) chat(s) from playground."
+      Haptics.success()
+    } catch {
+      serverSyncMessage = prismUserFacingError(error)
+      Haptics.error()
+    }
+  }
+
+  /// Export all local sessions as JSON (share / backup). Control plane has no server history.
+  func exportSessionsJSON() -> Data? {
+    persistCurrentSession()
+    let enc = JSONEncoder()
+    enc.outputFormatting = [.prettyPrinted, .sortedKeys]
+    enc.dateEncodingStrategy = .iso8601
+    return try? enc.encode(sessions)
+  }
+
+  /// Import sessions from JSON (merge by id).
+  func importSessionsJSON(_ data: Data) throws {
+    let dec = JSONDecoder()
+    dec.dateDecodingStrategy = .iso8601
+    let incoming = try dec.decode([ChatSession].self, from: data)
+    var byId = Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0) })
+    for s in incoming {
+      byId[s.id] = s
+    }
+    sessions = Array(byId.values).sorted { $0.updatedAt > $1.updatedAt }
+    trimSessions()
+    saveSessionsToDisk()
+    ensureActiveSession()
+    Haptics.success()
   }
 
   /// Write current transcript into `sessions` and disk.
@@ -1229,9 +1364,11 @@ final class AppState: ObservableObject {
         ?? imageModels.first?.model
     }
     if selectedVideoModelId == nil || !videoModels.contains(where: { $0.model == selectedVideoModelId }) {
-      selectedVideoModelId = videoModels.first(where: { $0.model == "google/veo-3.1-fast" })?.model
+      // Prefer Seedance for text-to-video (Hailuo is i2v-only; Grok needs ZDR path).
+      selectedVideoModelId = videoModels.first(where: { $0.model == "bytedance/seedance-2.0-fast" })?.model
+        ?? videoModels.first(where: { $0.model.hasPrefix("bytedance/seedance") })?.model
+        ?? videoModels.first(where: { $0.model == "google/veo-3.1-fast" })?.model
         ?? videoModels.first(where: { $0.model.hasPrefix("google/veo") })?.model
-        ?? videoModels.first(where: { $0.model == "bytedance/seedance-2.0-fast" })?.model
         ?? videoModels.first(where: {
           !$0.model.hasPrefix("minimax/hailuo") && !$0.model.hasPrefix("xai/grok-imagine-video")
         })?.model
@@ -1442,13 +1579,16 @@ final class AppState: ObservableObject {
     }
 
     let text: String
+    var sendImages: [String] = []
     switch mode {
     case .newFromDraft:
       let t = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-      guard !t.isEmpty else { return }
-      text = t
+      sendImages = draftImageDataUrls
+      guard !t.isEmpty || !sendImages.isEmpty else { return }
+      text = t.isEmpty ? "(image)" : t
       draft = ""
-      turns.append(ChatTurn(role: .user, text: text))
+      draftImageDataUrls = []
+      turns.append(ChatTurn(role: .user, text: text, imageDataUrls: sendImages.isEmpty ? nil : sendImages))
     case .regenerateLast:
       // Pop trailing assistant shells until a user turn is last.
       while let last = turns.last, last.role == .assistant {
@@ -1459,6 +1599,7 @@ final class AppState: ObservableObject {
         return
       }
       text = user.text
+      sendImages = user.imageDataUrls ?? []
     }
 
     let assistantId = UUID()
@@ -1483,7 +1624,12 @@ final class AppState: ObservableObject {
       case .playground:
         // Server keeps history under conversationId; model can change per turn.
         // Regenerate re-sends the same user text (new completion under current model).
-        try await sendPlayground(model: model, userText: text, assistantId: assistantId)
+        try await sendPlayground(
+          model: model,
+          userText: text,
+          assistantId: assistantId,
+          imageDataUrls: sendImages
+        )
       case .controlPlane:
         // Client resends full turns as messages; model is only the next completion's id.
         try await sendPlane(model: model, assistantId: assistantId)
@@ -1507,11 +1653,19 @@ final class AppState: ObservableObject {
     }
   }
 
-  private func sendPlayground(model: ModelEntry, userText: String, assistantId: UUID) async throws {
+  private func sendPlayground(
+    model: ModelEntry,
+    userText: String,
+    assistantId: UUID,
+    imageDataUrls: [String] = []
+  ) async throws {
+    let atts: [ChatAttachment]? =
+      imageDataUrls.isEmpty ? nil : imageDataUrls.map { ChatAttachment.image(dataURL: $0) }
     let body = ChatRequestBody(
       model: model.model,
       userInput: userText,
-      conversationId: conversationId
+      conversationId: conversationId,
+      attachments: atts
     )
     if useStream, model.streaming == true {
       var assembled = ""
@@ -1557,8 +1711,15 @@ final class AppState: ObservableObject {
       if let through, idx <= through { continue }
       switch turn.role {
       case .user:
-        guard !turn.text.isEmpty else { continue }
-        messages.append(ControlPlaneChatMessage(role: "user", content: turn.text))
+        let imgs = turn.imageDataUrls ?? []
+        guard !turn.text.isEmpty || !imgs.isEmpty else { continue }
+        messages.append(
+          ControlPlaneChatMessage(
+            role: "user",
+            content: turn.text.isEmpty ? " " : turn.text,
+            imageDataUrls: imgs.isEmpty ? nil : imgs
+          )
+        )
       case .assistant:
         // Skip empty / cancelled shells so the next model does not see noise.
         let t = turn.text.trimmingCharacters(in: .whitespacesAndNewlines)

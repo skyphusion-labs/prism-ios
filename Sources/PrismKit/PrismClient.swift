@@ -185,6 +185,16 @@ public final class PrismClient: @unchecked Sendable {
   ///
   /// Conversation ids from the Worker are path-safe (no `/`); we do not pre-encode
   /// because `URLComponents.path` would double-encode `%`.
+  /// List playground conversations (server-side history for the signed-in user).
+  public func listConversations() async throws -> [ConversationListItem] {
+    let res: ConversationListResponse = try await http.sendJSON(
+      method: "GET",
+      path: "/api/conversations",
+      headers: defaultHeaders
+    )
+    return res.conversations ?? []
+  }
+
   public func compactConversation(
     id: String,
     keepRecent: Int = 2,

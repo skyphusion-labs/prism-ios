@@ -1,5 +1,6 @@
 import SwiftUI
 import PrismKit
+import PhotosUI
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -9,6 +10,7 @@ struct ChatView: View {
   @FocusState private var draftFocused: Bool
   @State private var sharePayload: ShareTextPayload?
   @State private var showSessions = false
+  @State private var photoItem: PhotosPickerItem?
 
   var body: some View {
     VStack(spacing: 0) {
@@ -120,7 +122,56 @@ struct ChatView: View {
 
       Divider()
 
+      if !state.draftImageDataUrls.isEmpty {
+        ScrollView(.horizontal, showsIndicators: false) {
+          HStack(spacing: 8) {
+            ForEach(Array(state.draftImageDataUrls.enumerated()), id: \.offset) { idx, url in
+              ZStack(alignment: .topTrailing) {
+                draftThumb(url)
+                  .frame(width: 56, height: 56)
+                  .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                Button {
+                  state.removeDraftImage(at: idx)
+                } label: {
+                  Image(systemName: "xmark.circle.fill")
+                    .font(.caption)
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, .black.opacity(0.6))
+                }
+                .offset(x: 4, y: -4)
+                .accessibilityLabel("Remove attachment \(idx + 1)")
+              }
+            }
+          }
+          .padding(.horizontal)
+          .padding(.top, 8)
+        }
+      }
+
       HStack(alignment: .bottom, spacing: 8) {
+        PhotosPicker(selection: $photoItem, matching: .images, photoLibrary: .shared()) {
+          Image(systemName: "photo.on.rectangle")
+            .font(.title3)
+            .frame(minWidth: 44, minHeight: 44)
+        }
+        .disabled(state.isBusy || state.draftImageDataUrls.count >= 3)
+        .accessibilityLabel("Attach photo")
+        .accessibilityHint("Add up to three images for vision models")
+        .onChange(of: photoItem) { newItem in
+          guard let newItem else { return }
+          Task {
+            if let data = try? await newItem.loadTransferable(type: Data.self) {
+              #if canImport(UIKit)
+              let jpeg = UIImage(data: data)?.jpegData(compressionQuality: 0.75) ?? data
+              state.attachChatImageJPEGData(jpeg)
+              #else
+              state.attachChatImageJPEGData(data)
+              #endif
+            }
+            photoItem = nil
+          }
+        }
+
         TextField("Message", text: $state.draft, axis: .vertical)
           .lineLimit(1...6)
           .textFieldStyle(.roundedBorder)
@@ -150,7 +201,10 @@ struct ChatView: View {
               .font(.title2)
               .frame(minWidth: 44, minHeight: 44)
           }
-          .disabled(state.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+          .disabled(
+            state.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+              && state.draftImageDataUrls.isEmpty
+          )
           .accessibilityLabel("Send message")
         }
       }
@@ -338,11 +392,35 @@ private struct ChatEmptyState: View {
 
   private var subtitle: String {
     if state.backend == .controlPlane {
-      return "Messages stay on this device. Switch models anytime; context is kept until New chat. After a few turns, Compact summarizes older ones for the model."
+      return "Messages stay on this device (plane privacy). Attach photos for vision models. Compact summarizes older turns."
     }
-    return "Pick a model above and type a message. After multi-turn chat, Compact summarizes older turns (playground v0.175.7)."
+    return "Pick a model and type a message. Attach photos for vision. Sync cloud history from the chat list when signed in."
   }
 }
+
+extension ChatView {
+  @ViewBuilder
+  fileprivate func draftThumb(_ dataURL: String) -> some View {
+    #if canImport(UIKit)
+    if let ui = decodeDataURLImage(dataURL) {
+      Image(uiImage: ui).resizable().scaledToFill()
+    } else {
+      Color.secondary.opacity(0.2)
+    }
+    #else
+    Color.secondary.opacity(0.2)
+    #endif
+  }
+}
+
+#if canImport(UIKit)
+private func decodeDataURLImage(_ dataURL: String) -> UIImage? {
+  var s = dataURL
+  if let r = s.range(of: "base64,") { s = String(s[r.upperBound...]) }
+  guard let data = Data(base64Encoded: s, options: .ignoreUnknownCharacters) else { return nil }
+  return UIImage(data: data)
+}
+#endif
 
 private struct TurnBubble: View {
   let turn: ChatTurn
@@ -369,6 +447,22 @@ private struct TurnBubble: View {
               .accessibilityLabel("Model \(label)")
           }
         }
+        if let urls = turn.imageDataUrls, !urls.isEmpty {
+          HStack(spacing: 6) {
+            ForEach(Array(urls.enumerated()), id: \.offset) { _, url in
+              #if canImport(UIKit)
+              if let ui = decodeDataURLImage(url) {
+                Image(uiImage: ui)
+                  .resizable()
+                  .scaledToFill()
+                  .frame(width: 72, height: 72)
+                  .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+              }
+              #endif
+            }
+          }
+          .accessibilityLabel("\(urls.count) attached image\(urls.count == 1 ? "" : "s")")
+        }
         Group {
           if isStreaming {
             HStack(spacing: 8) {
@@ -378,8 +472,10 @@ private struct TurnBubble: View {
                 .foregroundStyle(.secondary)
             }
             .accessibilityLabel("Generating response")
-          } else if turn.text.isEmpty {
-            Text("…")
+          } else if turn.text.isEmpty || turn.text == "(image)" {
+            if turn.imageDataUrls?.isEmpty != false {
+              Text("…")
+            }
           } else if let attr = try? AttributedString(
             markdown: turn.text,
             options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
