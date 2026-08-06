@@ -50,9 +50,9 @@ CI runs package tests on Ubuntu. The iOS app is built with Xcode locally (not in
 
 ## Status
 
-- Kit **0.8.2**: Vision photo attach on chat; playground cloud chat sync; Seedance-first video;
-  complete starter chips; chat JSON export. Prior **0.8.1**: More hub, TestFlight archive path.
-  Prior 0.8.0: TTS/STT, music, compact, multi-session.
+- Kit **0.8.3**: Usage/spend screen, chat rate preview, capability tags, import chats, camera +
+  clipboard attach, mic→STT draft, long video background + notify. Prior **0.8.2**: vision attach,
+  playground sync, Seedance default. Prior **0.8.1**: More hub, TestFlight path.
 - App Store Connect: app `6798391677`, three consumable credit IAPs. See `docs/TESTFLIGHT.md`,
   `docs/ASC-CHECKLIST.md`.
 

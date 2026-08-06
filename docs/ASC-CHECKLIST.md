@@ -55,15 +55,36 @@ StoreKit Server API key (optional, for stricter plane verification later):
 | Review notes | Operator enrollment token; control plane privacy (no server chat) |
 | Do not ship | Public top-up marketing until sandbox redeem verified on device |
 
-## Pre-submit ASC pass (operator)
+## Pre-submit ASC pass (operator) — 0.8.3
 
 1. `asc apps list` / app 6798391677 still current  
 2. IAP three credit packs READY_TO_SUBMIT or approved  
-3. Screenshots updated for Chat (attach photo) + Image + Settings  
+3. **Screenshots (iPhone 6.7" + 6.5"):** Chat with model picker + stream; Chat with photo attach;
+   Image generate result; Video (Seedance) generating/done; More → Usage; Settings top-up  
 4. Privacy policy + support URLs live  
 5. Age rating questionnaire matches AI generation  
 6. Export compliance: HTTPS only  
-7. Build uploaded via TestFlight; internal group installed once  
+7. Privacy nutrition: photos, camera, mic; no tracking  
+8. **Review notes (paste in ASC):**  
+   > Prism is a metered multimodal AI client. Enrollment uses a single-use operator token (or
+   > recovery pcp_ key) stored in Keychain. Control plane never stores chat text. IAP packs apply
+   > prepaid credit via POST /v1/store/redeem. Demo: enroll with provided token, chat once, open
+   > More → Usage, generate a short image. Contact: conrad@skyphusion.org  
+9. Build uploaded via TestFlight; internal group installed once  
+
+## Review notes template (0.8.3)
+
+```
+Account: TestFlight internal (or sandbox Apple ID for IAP)
+Enrollment: operator provides single-use token OR recovery pcp_ key
+Steps:
+1. Launch → enroll with token
+2. Chat → short prompt (optional: attach photo with vision model)
+3. More → Usage & spend detail
+4. Image tab → simple prompt → generate
+5. Settings → Top up (sandbox) optional
+Privacy: chats local only on control plane; no third-party analytics
+```
 
 ## Product gates
 

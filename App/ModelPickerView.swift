@@ -83,6 +83,22 @@ struct ModelPickerView: View {
             .font(.caption2)
             .foregroundStyle(.secondary)
             .textSelection(.enabled)
+          if !sel.capabilityTags.isEmpty {
+            Text(sel.capabilityTags.joined(separator: " · "))
+              .font(.caption2)
+              .foregroundStyle(.tertiary)
+              .accessibilityLabel("Capabilities \(sel.capabilityTags.joined(separator: ", "))")
+          }
+        }
+        if let preview = state.chatSpendPreview {
+          Text(preview)
+            .font(.caption2)
+            .foregroundStyle(
+              (!state.draftImageDataUrls.isEmpty && state.selectedModel?.supportsVision != true)
+                ? Color.orange : Color.secondary
+            )
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityLabel(preview)
         }
       }
 
@@ -108,9 +124,7 @@ struct ModelPickerView: View {
     var parts: [String] = []
     parts.append(m.label ?? m.model)
     if let p = m.priceLabel { parts.append(p) }
-    if m.streaming == true { parts.append("SSE") }
-    if let g = m.group, !g.isEmpty { parts.append(g) }
-    if !m.isSpendable { parts.append("unspendable") }
+    parts.append(contentsOf: m.capabilityTags)
     return parts.joined(separator: " · ")
   }
 }

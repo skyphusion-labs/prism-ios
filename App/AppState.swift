@@ -7,6 +7,7 @@ import AVFoundation
 #endif
 #if canImport(UIKit)
 import UIKit
+import UserNotifications
 #endif
 
 /// One chat turn for the shell UI (also persisted in multi-session storage).
@@ -751,6 +752,9 @@ final class AppState: ObservableObject {
   // MARK: - Lifecycle
 
   func bootstrap() async {
+    #if canImport(UIKit)
+    UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    #endif
     rebuildClients(clearSession: false)
     if backend == .controlPlane {
       await probePlaneHealth()
@@ -1947,12 +1951,15 @@ final class AppState: ObservableObject {
     }
     mediaBusy = true
     mediaError = nil
-    mediaStatus = "Generating \(model.model) (often 1-3 min)…"
+    mediaStatus =
+      "Generating \(model.model) · often 1-3 min. You can leave this tab; result stays here."
     lastVideoURL = nil
+    beginVideoBackgroundWork()
     startMediaTimer()
     defer {
       stopMediaTimer()
       mediaBusy = false
+      endVideoBackgroundWork()
     }
     do {
       try Task.checkCancellation()
@@ -1974,6 +1981,10 @@ final class AppState: ObservableObject {
         )
       )
       Haptics.success()
+      notifyVideoFinished(
+        success: true,
+        detail: "\(lastVideoModel ?? model.model) finished in \(mediaElapsedSeconds)s"
+      )
       await refreshPlaneBalanceOnly()
     } catch is CancellationError {
       mediaError = PrismError.cancelled.userFacingMessage
@@ -1982,6 +1993,7 @@ final class AppState: ObservableObject {
     } catch {
       mediaError = prismUserFacingError(error)
       mediaStatus = "Failed after \(mediaElapsedSeconds)s · prompt kept for Retry"
+      notifyVideoFinished(success: false, detail: mediaError ?? "Video failed")
       Haptics.error()
     }
   }
@@ -2260,11 +2272,154 @@ final class AppState: ObservableObject {
     }
   }
 
-  private func refreshPlaneBalanceOnly() async {
+  func refreshPlaneBalanceOnly() async {
     guard deviceKeyPresent else { return }
     if let me = try? await controlPlane.me() {
       applyPlaneMe(me)
     }
+  }
+
+  /// Full period usage (`GET /v1/usage`) for the Usage screen.
+  func fetchPlaneUsage() async throws -> UsageSummary {
+    try await controlPlane.usage()
+  }
+
+  /// Chat send cost hint (token rates are not per-request exact).
+  var chatSpendPreview: String? {
+    guard let m = selectedModel else { return nil }
+    var parts: [String] = []
+    if let p = m.priceLabel, !p.isEmpty {
+      if p == "included" {
+        parts.append("Rate: included")
+      } else {
+        parts.append("Rate: \(p)")
+      }
+    }
+    if m.supportsVision {
+      parts.append(draftImageDataUrls.isEmpty ? "vision-capable" : "vision attach · metered")
+    } else if !draftImageDataUrls.isEmpty {
+      parts.append("warning: model may not support vision")
+    }
+    if useStream, m.streaming == true {
+      parts.append("stream on")
+    }
+    if let g = m.group, !g.isEmpty { parts.append(g) }
+    guard !parts.isEmpty else { return nil }
+    return "Send: " + parts.joined(separator: " · ")
+  }
+
+  /// Paste image from clipboard into chat draft attachments.
+  @discardableResult
+  func pasteChatImageFromClipboard() -> Bool {
+    #if canImport(UIKit)
+    if let img = UIPasteboard.general.image,
+       let data = img.jpegData(compressionQuality: 0.75)
+    {
+      attachChatImageJPEGData(data)
+      return true
+    }
+    if let data = UIPasteboard.general.data(forPasteboardType: "public.jpeg")
+      ?? UIPasteboard.general.data(forPasteboardType: "public.png")
+    {
+      attachChatImageJPEGData(data)
+      return true
+    }
+    errorMessage = "No image on the clipboard."
+    return false
+    #else
+    return false
+    #endif
+  }
+
+  /// Transcribe recorded m4a bytes and append to the chat draft.
+  func sttToChatDraft(audioData: Data, mime: String = "audio/mp4") {
+    chatSttTask?.cancel()
+    chatSttTask = Task { await performSttToChatDraft(audioData: audioData, mime: mime) }
+  }
+
+  /// If a transcript already exists (Audio tab), push it into the draft.
+  func applyLastTranscriptToDraft() {
+    guard let t = lastTranscript?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty else {
+      errorMessage = "No transcript yet. Hold the mic to record, or use More → Audio."
+      return
+    }
+    draft = draft.isEmpty ? t : (draft + " " + t)
+    Haptics.light()
+  }
+
+  @Published var chatSttBusy = false
+  private var chatSttTask: Task<Void, Never>?
+
+  private func performSttToChatDraft(audioData: Data, mime: String) async {
+    guard canUseMediaDoors else {
+      errorMessage = "Control plane + device key required for speech-to-text."
+      return
+    }
+    if !isNetworkSatisfied {
+      errorMessage = "No network connection."
+      return
+    }
+    guard let model = selectedSttModel ?? sttModels.first else {
+      errorMessage = "No STT model available."
+      return
+    }
+    chatSttBusy = true
+    errorMessage = nil
+    defer { chatSttBusy = false }
+    setSttAudioData(audioData, mime: mime, label: "chat-mic")
+    do {
+      let res = try await controlPlane.transcribe(model: model.model, audio: sttAudioPayload)
+      let t = (res.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !t.isEmpty else {
+        errorMessage = "Empty transcript."
+        return
+      }
+      lastTranscript = t
+      draft = draft.isEmpty ? t : (draft + " " + t)
+      banner = "Transcript added to draft"
+      Haptics.success()
+      await refreshPlaneBalanceOnly()
+    } catch {
+      errorMessage = prismUserFacingError(error)
+      Haptics.error()
+    }
+  }
+
+  /// Background task id while a long video gen is running (iOS).
+  #if canImport(UIKit)
+  private var videoBackgroundTask: UIBackgroundTaskIdentifier = .invalid
+  #endif
+
+  func beginVideoBackgroundWork() {
+    #if canImport(UIKit)
+    videoBackgroundTask = UIApplication.shared.beginBackgroundTask(withName: "prism.video") { [weak self] in
+      self?.endVideoBackgroundWork()
+    }
+    #endif
+  }
+
+  func endVideoBackgroundWork() {
+    #if canImport(UIKit)
+    if videoBackgroundTask != .invalid {
+      UIApplication.shared.endBackgroundTask(videoBackgroundTask)
+      videoBackgroundTask = .invalid
+    }
+    #endif
+  }
+
+  func notifyVideoFinished(success: Bool, detail: String) {
+    #if canImport(UIKit)
+    let content = UNMutableNotificationContent()
+    content.title = success ? "Video ready" : "Video failed"
+    content.body = detail
+    content.sound = .default
+    let req = UNNotificationRequest(
+      identifier: "prism.video.\(UUID().uuidString)",
+      content: content,
+      trigger: nil
+    )
+    UNUserNotificationCenter.current().add(req)
+    #endif
   }
 
   /// StoreKit 2 signed transaction → prepaid credit on this device's account.

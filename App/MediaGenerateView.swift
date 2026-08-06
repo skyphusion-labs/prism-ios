@@ -374,10 +374,16 @@ struct MediaGenerateView: View {
     let s = state.mediaElapsedSeconds
     let m = s / 60
     let r = s % 60
-    if m > 0 {
-      return String(format: "Elapsed %d:%02d · often 1-3 min for video", m, r)
+    if kind == .video {
+      if m > 0 {
+        return String(format: "Elapsed %d:%02d · often 1-3 min · safe to leave tab", m, r)
+      }
+      return "Elapsed \(s)s · often 1-3 min · safe to leave tab"
     }
-    return "Elapsed \(s)s" + (kind == .video ? " · often 1-3 min" : "")
+    if m > 0 {
+      return String(format: "Elapsed %d:%02d", m, r)
+    }
+    return "Elapsed \(s)s"
   }
 
   private var modelsForKind: [ModelEntry] {

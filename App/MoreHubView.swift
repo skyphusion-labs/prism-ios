@@ -58,6 +58,13 @@ struct MoreHubView: View {
             }
           }
           LabeledContent("Plane health", value: state.planeHealthLabel)
+          NavigationLink {
+            UsageView()
+          } label: {
+            Label("Usage & spend detail", systemImage: "chart.bar")
+              .frame(minHeight: 44)
+          }
+          .accessibilityHint("Dual-pool balance and period meter from GET /v1/usage")
         } else {
           Text("Enroll a device key to use metered doors.")
             .font(.footnote)

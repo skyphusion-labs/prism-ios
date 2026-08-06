@@ -10,6 +10,8 @@ struct SettingsView: View {
   @State private var pastedDeviceKey: String = ""
   @State private var confirmClearKey = false
   @State private var chatExportURL: ExportURL?
+  @State private var showImportPicker = false
+  @State private var importMessage: String?
 
   var body: some View {
     Form {
@@ -261,8 +263,40 @@ struct SettingsView: View {
         ChatExportActivityView(items: [item.url])
         #endif
       }
+      Button {
+        showImportPicker = true
+      } label: {
+        Label("Import chats (JSON)", systemImage: "square.and.arrow.down")
+      }
+      .frame(minHeight: 44)
+      .fileImporter(
+        isPresented: $showImportPicker,
+        allowedContentTypes: [.json, .data],
+        allowsMultipleSelection: false
+      ) { result in
+        switch result {
+        case .success(let urls):
+          guard let url = urls.first else { return }
+          let access = url.startAccessingSecurityScopedResource()
+          defer { if access { url.stopAccessingSecurityScopedResource() } }
+          do {
+            let data = try Data(contentsOf: url)
+            try state.importSessionsJSON(data)
+            importMessage = "Imported chats (merged by id)."
+          } catch {
+            importMessage = prismUserFacingError(error)
+          }
+        case .failure(let err):
+          importMessage = err.localizedDescription
+        }
+      }
+      if let importMessage {
+        Text(importMessage)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+      }
       Text(
-        "Control plane never stores conversation text. Export for backup. "
+        "Control plane never stores conversation text. Export/import for backup. "
           + "Playground cloud history: Chats list → Sync from playground cloud."
       )
       .font(.caption)

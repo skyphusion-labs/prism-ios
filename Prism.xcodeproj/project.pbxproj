@@ -13,6 +13,7 @@
 		51A7DFE10E20F58251B37E68 /* MusicGenerateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 25B6C246B14B32BEDBDDC7DE /* MusicGenerateView.swift */; };
 		53865BEF9B88453D6F075F4A /* StoreManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6CB6EC66875B30FD0229C59 /* StoreManager.swift */; };
 		57305F9F30C177CBAB68B148 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 303C401457C10158AA627CEB /* OnboardingView.swift */; };
+		58A0E9378BD6D389D440147E /* UsageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D66DD4FCC23724E0D8131B20 /* UsageView.swift */; };
 		5DF311595720F8E736CB270B /* SpeechGenerateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE0FF3705A3645B3B6397E38 /* SpeechGenerateView.swift */; };
 		5EA917AF5480F8C34E794B7E /* PrismKit in Frameworks */ = {isa = PBXBuildFile; productRef = BF95EDC2BE93FF361E1F2D6E /* PrismKit */; };
 		61C14F92F5E19AD247115B66 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE232F0CC41662D1703EF458 /* AppState.swift */; };
@@ -45,6 +46,7 @@
 		B380EA7A1F0D104D733EB197 /* MediaGenerateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaGenerateView.swift; sourceTree = "<group>"; };
 		BF2166C757BF46326F065EC8 /* MoreHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoreHubView.swift; sourceTree = "<group>"; };
 		C4115D7B498B51A37C0C1059 /* PrismApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrismApp.swift; sourceTree = "<group>"; };
+		D66DD4FCC23724E0D8131B20 /* UsageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageView.swift; sourceTree = "<group>"; };
 		DE0FF3705A3645B3B6397E38 /* SpeechGenerateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechGenerateView.swift; sourceTree = "<group>"; };
 		F65D9A85386E8EFA1A6D0C70 /* ChatView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatView.swift; sourceTree = "<group>"; };
 		F6CB6EC66875B30FD0229C59 /* StoreManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreManager.swift; sourceTree = "<group>"; };
@@ -93,6 +95,7 @@
 				6E02BE541FF59B758F2AECB0 /* SettingsView.swift */,
 				DE0FF3705A3645B3B6397E38 /* SpeechGenerateView.swift */,
 				F6CB6EC66875B30FD0229C59 /* StoreManager.swift */,
+				D66DD4FCC23724E0D8131B20 /* UsageView.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -206,6 +209,7 @@
 				B9DEEA98E63BEE7F2FC9A6EE /* SettingsView.swift in Sources */,
 				5DF311595720F8E736CB270B /* SpeechGenerateView.swift in Sources */,
 				53865BEF9B88453D6F075F4A /* StoreManager.swift in Sources */,
+				58A0E9378BD6D389D440147E /* UsageView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -222,6 +226,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Prism;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Take a photo to attach for vision chat or image-to-video.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Record audio to transcribe with speech-to-text models.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Save generated images to your photo library.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Attach photos as reference images for image-to-image and image-to-video.";
@@ -277,7 +282,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 14;
+				CURRENT_PROJECT_VERSION = 15;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = 858878N47M;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -298,7 +303,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 0.8.2;
+				MARKETING_VERSION = 0.8.3;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -345,7 +350,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 14;
+				CURRENT_PROJECT_VERSION = 15;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = 858878N47M;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -360,7 +365,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 0.8.2;
+				MARKETING_VERSION = 0.8.3;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -381,6 +386,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Prism;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Take a photo to attach for vision chat or image-to-video.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Record audio to transcribe with speech-to-text models.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Save generated images to your photo library.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Attach photos as reference images for image-to-image and image-to-video.";
