@@ -19,11 +19,13 @@
 		5EA917AF5480F8C34E794B7E /* PrismKit in Frameworks */ = {isa = PBXBuildFile; productRef = BF95EDC2BE93FF361E1F2D6E /* PrismKit */; };
 		61C14F92F5E19AD247115B66 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE232F0CC41662D1703EF458 /* AppState.swift */; };
 		6ABE2964DB4D5B87E7C858F1 /* BiometricLock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 37FA2272002A85BFCC9ACA06 /* BiometricLock.swift */; };
+		808325A6C53AEE76AAA74BC4 /* LegalLinks.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4753ECB647D3B97BFC476AE5 /* LegalLinks.swift */; };
 		898BA0DED59FDABB75D032A7 /* EnrollView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0044568A64445857E24FD409 /* EnrollView.swift */; };
 		8C3819507DE7FD87AA8679F9 /* ChatView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F65D9A85386E8EFA1A6D0C70 /* ChatView.swift */; };
 		911682D8AFBAB551FD3AEA8E /* PrismWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 8A0D770899DE58CF9B021732 /* PrismWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		92413ACF4D481B527D0488B0 /* PrismWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEB11428DB56B9C2AC9B1168 /* PrismWidget.swift */; };
 		A6E821D417A39F86FEE743D3 /* AudioRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF2A06FA03AA3BC3922B359C /* AudioRecorder.swift */; };
+		B234AD32F35A92438A504CBA /* LicenseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E6828C631CAB007C4EDED21 /* LicenseView.swift */; };
 		B9DEEA98E63BEE7F2FC9A6EE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E02BE541FF59B758F2AECB0 /* SettingsView.swift */; };
 		C6F007D55BBA410ABB9E2DF1 /* PrismApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4115D7B498B51A37C0C1059 /* PrismApp.swift */; };
 		D792430386F27A695D5F9858 /* MoreHubView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BF2166C757BF46326F065EC8 /* MoreHubView.swift */; };
@@ -67,7 +69,9 @@
 		37FA2272002A85BFCC9ACA06 /* BiometricLock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BiometricLock.swift; sourceTree = "<group>"; };
 		38DDFCFF6BA022D56B751299 /* Haptics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Haptics.swift; sourceTree = "<group>"; };
 		3CBECDC40DB2F7D8BF88B956 /* Prism.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Prism.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3E6828C631CAB007C4EDED21 /* LicenseView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LicenseView.swift; sourceTree = "<group>"; };
 		3F68E37E40EC71808CA5FCDB /* PrismIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrismIntents.swift; sourceTree = "<group>"; };
+		4753ECB647D3B97BFC476AE5 /* LegalLinks.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalLinks.swift; sourceTree = "<group>"; };
 		50D0A77935D1B162F48B0CCA /* PrismWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = PrismWidget.entitlements; sourceTree = "<group>"; };
 		63C1660433159F3E5363F65D /* SessionListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionListView.swift; sourceTree = "<group>"; };
 		6E02BE541FF59B758F2AECB0 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
@@ -130,6 +134,8 @@
 				F65D9A85386E8EFA1A6D0C70 /* ChatView.swift */,
 				0044568A64445857E24FD409 /* EnrollView.swift */,
 				38DDFCFF6BA022D56B751299 /* Haptics.swift */,
+				4753ECB647D3B97BFC476AE5 /* LegalLinks.swift */,
+				3E6828C631CAB007C4EDED21 /* LicenseView.swift */,
 				23A68163390DA2D20D8511F7 /* LivePCMCapture.swift */,
 				94567EB75BC9121E95247AB1 /* LoginView.swift */,
 				B380EA7A1F0D104D733EB197 /* MediaGenerateView.swift */,
@@ -273,6 +279,8 @@
 				8C3819507DE7FD87AA8679F9 /* ChatView.swift in Sources */,
 				898BA0DED59FDABB75D032A7 /* EnrollView.swift in Sources */,
 				D7AF72B123245E304C361EC1 /* Haptics.swift in Sources */,
+				808325A6C53AEE76AAA74BC4 /* LegalLinks.swift in Sources */,
+				B234AD32F35A92438A504CBA /* LicenseView.swift in Sources */,
 				04B9CBBF92D60EB6483FE5B5 /* LivePCMCapture.swift in Sources */,
 				33360F83FD87F9DD968DFA2F /* LoginView.swift in Sources */,
 				F8CA0D87C3AAE424FB53327F /* MediaGenerateView.swift in Sources */,
@@ -315,7 +323,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Widget/PrismWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 16;
+				CURRENT_PROJECT_VERSION = 17;
 				DEVELOPMENT_TEAM = 858878N47M;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Widget/Info.plist;
@@ -398,7 +406,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 16;
+				CURRENT_PROJECT_VERSION = 17;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = 858878N47M;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -466,7 +474,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 16;
+				CURRENT_PROJECT_VERSION = 17;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = 858878N47M;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -497,7 +505,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Widget/PrismWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 16;
+				CURRENT_PROJECT_VERSION = 17;
 				DEVELOPMENT_TEAM = 858878N47M;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Widget/Info.plist;

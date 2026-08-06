@@ -50,10 +50,9 @@ CI runs package tests on Ubuntu. The iOS app is built with Xcode locally (not in
 
 ## Status
 
-- Kit **0.8.4**: biometric app lock, per-request cost headers, live STT WebSocket, home widget +
-  App Shortcuts, import merge/replace polish, ASC screenshot kit. Prior **0.8.3**: Usage screen,
-  rate preview, import, camera/clipboard, file STT draft, long video notify. Prior **0.8.2**:
-  vision, playground sync, Seedance.
+- Kit **0.8.4** (build 17): biometric lock, per-request cost, live STT WS, widget/shortcuts,
+  music open/play + elapsed, Settings legal (privacy, bundled AGPL LICENSE, source links).
+  Prior **0.8.3**: Usage screen, import, mic STT, long video. Prior **0.8.2**: vision, Seedance.
 - App Store Connect: app `6798391677`, three consumable credit IAPs. See `docs/TESTFLIGHT.md`,
   `docs/ASC-CHECKLIST.md`.
 

@@ -12,7 +12,8 @@ Use `asc` for API work; dashboard only for agreement/tax that CLI cannot do.
 | App record | Exists as "Prism - prism" |
 | IAP consumables | `org.skyphusion.prism.credit.{5,20,50}` READY_TO_SUBMIT |
 | Privacy nutrition labels | Declare network; no tracking if true; photo library for refs/save |
-| Privacy policy URL | Hosted page (e.g. skyphusion.org / play privacy) linked in ASC |
+| Privacy policy URL | `https://skyphusion.org/privacy.html` (ASC + in-app Settings) |
+| AGPL source / license | In-app Settings → Legal; source `github.com/skyphusion-labs/prism-ios`; full LICENSE bundled |
 | Support URL | Same or status.skyphusion.org |
 | Export compliance | Standard encryption (HTTPS only) unless you add more |
 | Content rights | DOES_NOT_USE_THIRD_PARTY_CONTENT (current ASC attr) |

@@ -119,25 +119,60 @@ struct SettingsView: View {
       }
 
       Section {
-        Link(destination: URL(string: "https://skyphusion.org")!) {
-          Label("skyphusion.org", systemImage: "globe")
-        }
-        Link(destination: URL(string: "https://skyphusion.org/privacy.html")!) {
+        Link(destination: LegalLinks.privacyPolicy) {
           Label("Privacy policy", systemImage: "hand.raised")
         }
-        Link(destination: URL(string: "https://play.skyphusion.org")!) {
+        .frame(minHeight: 44)
+        NavigationLink {
+          LicenseView()
+        } label: {
+          Label("License (\(LegalLinks.licenseShortName))", systemImage: "doc.text")
+        }
+        .frame(minHeight: 44)
+        Link(destination: LegalLinks.licenseOnline) {
+          Label("License on GitHub", systemImage: "link")
+        }
+        .frame(minHeight: 44)
+        Link(destination: LegalLinks.sourceCode) {
+          Label("Source code (this app)", systemImage: "chevron.left.forwardslash.chevron.right")
+        }
+        .frame(minHeight: 44)
+        Link(destination: LegalLinks.controlPlaneSource) {
+          Label("Source (control plane)", systemImage: "server.rack")
+        }
+        .frame(minHeight: 44)
+        Link(destination: LegalLinks.prismWorkerSource) {
+          Label("Source (playground Worker)", systemImage: "cloud")
+        }
+        .frame(minHeight: 44)
+      } header: {
+        Text("Legal & open source")
+      } footer: {
+        Text(
+          "\(LegalLinks.copyrightLine) "
+            + "Corresponding source is published on GitHub; the full license is bundled in the app."
+        )
+      }
+
+      Section {
+        Link(destination: LegalLinks.website) {
+          Label("skyphusion.org", systemImage: "globe")
+        }
+        Link(destination: LegalLinks.playground) {
           Label("Prism playground (web)", systemImage: "macwindow")
         }
-        Link(destination: URL(string: "https://status.skyphusion.org")!) {
+        Link(destination: LegalLinks.status) {
           Label("Status", systemImage: "heart.text.square")
         }
-        Link(destination: URL(string: "mailto:support@skyphusion.org")!) {
+        Link(destination: LegalLinks.supportEmail) {
           Label("support@skyphusion.org", systemImage: "envelope")
         }
+        row("Version", "\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?") (\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"))")
+        row("Kit", "\(PrismKit.name) \(PrismKit.version)")
       } header: {
         Text("About")
       } footer: {
-        Text("Prism is an AGPL product of SkyPhusion Labs. Kit \(PrismKit.version).")
+        Text("Prism by SkyPhusion Labs · \(LegalLinks.licenseShortName)")
       }
 
       if let err = state.errorMessage {
