@@ -243,20 +243,26 @@ public final class ControlPlaneClient: @unchecked Sendable {
   }
 
   /// `POST /v1/videos/generations` -- `video` is a URL or inline asset.
-  /// On iOS uses a background URLSession (best-effort; multi-minute idle waits
-  /// still may not survive lock -- plane is synchronous request/response).
+  /// Prefer `async: true` (plane 0.4.29+): returns a job id; poll ``getJob``.
   public func generateVideo(_ body: VideoGenerationRequest) async throws -> VideoGenerationResponse {
     let key = try requireKey()
-    let res: VideoGenerationResponse = try await http.sendJSON(
+    let (httpRes, res): (HTTPURLResponse, VideoGenerationResponse) = try await http.sendJSONWithResponse(
       method: "POST",
       path: "/v1/videos/generations",
       body: body,
       bearer: key,
-      timeout: Self.musicTimeout,
-      preferBackground: true
+      okStatuses: Set([200, 202]),
+      timeout: body.async == true ? 60 : Self.musicTimeout,
+      preferBackground: body.async != true
     )
     if let err = res.error {
       throw PrismError.serverError(err.message ?? err.code ?? "video generation error")
+    }
+    if httpRes.statusCode == 202 || (res.id != nil && res.video == nil) {
+      guard let id = res.id, !id.isEmpty else {
+        throw PrismError.serverError("Async video job missing id")
+      }
+      return res
     }
     guard let video = res.video, !video.isEmpty else {
       throw PrismError.serverError("Empty video payload")
@@ -264,8 +270,47 @@ public final class ControlPlaneClient: @unchecked Sendable {
     return res
   }
 
-  public func generateVideo(model: String, prompt: String, image: String? = nil) async throws -> VideoGenerationResponse {
-    try await generateVideo(VideoGenerationRequest(model: model, prompt: prompt, image: image))
+  public func generateVideo(
+    model: String,
+    prompt: String,
+    image: String? = nil,
+    async: Bool = true
+  ) async throws -> VideoGenerationResponse {
+    try await generateVideo(
+      VideoGenerationRequest(model: model, prompt: prompt, image: image, async: async)
+    )
+  }
+
+  /// `GET /v1/jobs/:id` -- poll async video/music job (plane 0.4.29+).
+  public func getJob(id: String) async throws -> AsyncJobResponse {
+    let key = try requireKey()
+    let path = "/v1/jobs/\(id)"
+    return try await http.sendJSON(
+      method: "GET",
+      path: path,
+      bearer: key,
+      timeout: 30,
+      preferBackground: true
+    )
+  }
+
+  /// Poll until succeeded/failed or `timeout` elapses. Interval default 4s.
+  public func waitForJob(
+    id: String,
+    pollInterval: TimeInterval = 4,
+    timeout: TimeInterval = 420
+  ) async throws -> AsyncJobResponse {
+    let deadline = Date().addingTimeInterval(timeout)
+    var last: AsyncJobResponse?
+    while Date() < deadline {
+      try Task.checkCancellation()
+      let job = try await getJob(id: id)
+      last = job
+      if job.isTerminal { return job }
+      try await Task.sleep(nanoseconds: UInt64(pollInterval * 1_000_000_000))
+    }
+    if let last { return last }
+    throw PrismError.serverError("Job \(id) timed out waiting for completion")
   }
 
   /// `POST /v1/audio/speech` -- metered TTS; returns base64 audio (mp3 by default).
@@ -315,19 +360,26 @@ public final class ControlPlaneClient: @unchecked Sendable {
   }
 
   /// `POST /v1/music/generations` -- metered music; `audio` is URL or inline asset.
-  /// On iOS uses a background URLSession (best-effort under brief suspension).
+  /// Prefer `async: true` (plane 0.4.29+) for lock-safe poll.
   public func generateMusic(_ body: MusicGenerationRequest) async throws -> MusicGenerationResponse {
     let key = try requireKey()
-    let res: MusicGenerationResponse = try await http.sendJSON(
+    let (httpRes, res): (HTTPURLResponse, MusicGenerationResponse) = try await http.sendJSONWithResponse(
       method: "POST",
       path: "/v1/music/generations",
       body: body,
       bearer: key,
-      timeout: Self.musicTimeout,
-      preferBackground: true
+      okStatuses: Set([200, 202]),
+      timeout: body.async == true ? 60 : Self.musicTimeout,
+      preferBackground: body.async != true
     )
     if let err = res.error {
       throw PrismError.serverError(err.message ?? err.code ?? "music generation error")
+    }
+    if httpRes.statusCode == 202 || (res.id != nil && res.audio == nil) {
+      guard let id = res.id, !id.isEmpty else {
+        throw PrismError.serverError("Async music job missing id")
+      }
+      return res
     }
     guard let audio = res.audio, !audio.isEmpty else {
       throw PrismError.serverError("Empty music payload")
@@ -335,8 +387,15 @@ public final class ControlPlaneClient: @unchecked Sendable {
     return res
   }
 
-  public func generateMusic(model: String, prompt: String, lyrics: String? = nil) async throws -> MusicGenerationResponse {
-    try await generateMusic(MusicGenerationRequest(model: model, prompt: prompt, lyrics: lyrics))
+  public func generateMusic(
+    model: String,
+    prompt: String,
+    lyrics: String? = nil,
+    async: Bool = true
+  ) async throws -> MusicGenerationResponse {
+    try await generateMusic(
+      MusicGenerationRequest(model: model, prompt: prompt, lyrics: lyrics, async: async)
+    )
   }
 
   // MARK: - Store

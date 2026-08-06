@@ -951,15 +951,18 @@ public struct ImageGenerationResponse: Codable, Sendable, Equatable {
 }
 
 /// `POST /v1/videos/generations` body. `image` is optional i2v (data: or https:).
+/// Set `async` true (plane 0.4.29+) for 202 job + poll instead of holding the connection.
 public struct VideoGenerationRequest: Codable, Sendable, Equatable {
   public var model: String
   public var prompt: String?
   public var image: String?
+  public var async: Bool?
 
-  public init(model: String, prompt: String? = nil, image: String? = nil) {
+  public init(model: String, prompt: String? = nil, image: String? = nil, async: Bool? = nil) {
     self.model = model
     self.prompt = prompt
     self.image = image
+    self.async = async
   }
 }
 
@@ -968,6 +971,36 @@ public struct VideoGenerationResponse: Codable, Sendable, Equatable {
   public let model: String?
   public let video: String?
   public let error: ControlPlaneErrorBody?
+  /// Present on 202 async accept (plane 0.4.29+).
+  public let id: String?
+  public let status: String?
+  public let kind: String?
+}
+
+// MARK: - Async jobs (`GET /v1/jobs/:id`, plane 0.4.29+)
+
+public struct AsyncJobResponse: Codable, Sendable, Equatable {
+  public let id: String
+  public let kind: String?
+  public let model: String?
+  public let status: String
+  public let created_at: String?
+  public let updated_at: String?
+  public let result: AsyncJobResult?
+  public let error: ControlPlaneErrorBody?
+
+  public var isTerminal: Bool {
+    status == "succeeded" || status == "failed"
+  }
+
+  public var isSuccess: Bool { status == "succeeded" }
+}
+
+public struct AsyncJobResult: Codable, Sendable, Equatable {
+  public let video: String?
+  public let audio: String?
+  public let model: String?
+  public let rehosted: Bool?
 }
 
 // MARK: - Control plane TTS (`POST /v1/audio/speech`)
@@ -1028,11 +1061,13 @@ public struct MusicGenerationRequest: Codable, Sendable, Equatable {
   public var model: String
   public var prompt: String
   public var lyrics: String?
+  public var async: Bool?
 
-  public init(model: String, prompt: String, lyrics: String? = nil) {
+  public init(model: String, prompt: String, lyrics: String? = nil, async: Bool? = nil) {
     self.model = model
     self.prompt = prompt
     self.lyrics = lyrics
+    self.async = async
   }
 }
 
@@ -1041,6 +1076,9 @@ public struct MusicGenerationResponse: Codable, Sendable, Equatable {
   public let model: String?
   public let audio: String?
   public let error: ControlPlaneErrorBody?
+  public let id: String?
+  public let status: String?
+  public let kind: String?
 
   /// When `audio` is raw base64 or a data URL, decoded bytes; nil for https URLs.
   public var audioData: Data? {

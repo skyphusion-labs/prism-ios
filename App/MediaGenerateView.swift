@@ -343,12 +343,14 @@ struct MediaGenerateView: View {
   @ViewBuilder
   private func videoResultSection(_ urlStr: String) -> some View {
     Section {
-      if let url = URL(string: urlStr), url.scheme?.hasPrefix("http") == true {
+      if let url = Self.playableVideoURL(urlStr) {
+        // Fresh player per URL so Range-capable play-proxy media reloads cleanly.
         VideoPlayer(player: AVPlayer(url: url))
           .frame(minHeight: 220)
           .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+          .id(url.absoluteString)
         Link("Open in browser", destination: url)
-        Text(urlStr)
+        Text(url.absoluteString)
           .font(.caption2)
           .foregroundStyle(.secondary)
           .textSelection(.enabled)
@@ -367,7 +369,22 @@ struct MediaGenerateView: View {
       }
     } header: {
       Text("Result")
+    } footer: {
+      Text("Grok videos stream from play-proxy with HTTP Range. If playback fails, Open in browser.")
     }
+  }
+
+  /// Prefer URLComponents so signed media tokens with dots stay intact.
+  private static func playableVideoURL(_ raw: String) -> URL? {
+    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    if let u = URL(string: trimmed), u.scheme?.hasPrefix("http") == true { return u }
+    if let encoded = trimmed.addingPercentEncoding(withAllowedCharacters: .urlFragmentAllowed),
+       let u = URL(string: encoded),
+       u.scheme?.hasPrefix("http") == true
+    {
+      return u
+    }
+    return nil
   }
 
   private var elapsedLabel: String {
@@ -376,9 +393,9 @@ struct MediaGenerateView: View {
     let r = s % 60
     if kind == .video {
       if m > 0 {
-        return String(format: "Elapsed %d:%02d · often 1-3 min · stay in Prism", m, r)
+        return String(format: "Elapsed %d:%02d · often 1-3 min · lock-safe poll", m, r)
       }
-      return "Elapsed \(s)s · often 1-3 min · stay in Prism"
+      return "Elapsed \(s)s · often 1-3 min · lock-safe poll"
     }
     if m > 0 {
       return String(format: "Elapsed %d:%02d", m, r)
@@ -462,7 +479,7 @@ struct MediaGenerateView: View {
       return "Grok video on plane 0.4.14+ uses a ZDR upload path (play-proxy media URL). Prefer Veo / Seedance Fast if it still fails."
     }
     return "Veo and Seedance Fast are most reliable. Full Seedance may take up to ~3 min. "
-      + "Stay in Prism (screen stays on). Locking the phone can cancel the run."
+      + "Jobs run on the plane; safe to lock while polling. Grok uses signed play-proxy media."
   }
 
   #if canImport(UIKit)

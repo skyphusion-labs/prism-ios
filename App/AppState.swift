@@ -739,7 +739,46 @@ final class AppState: ObservableObject {
     let estimate = musicLyrics.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
       ? "often 2-4 min"
       : "often 3-5 min"
-    return "Elapsed \(elapsed) · \(estimate) · stay in Prism (screen stays on)"
+    return "Elapsed \(elapsed) · \(estimate) · lock-safe poll"
+  }
+
+  /// Grok ZDR / play-proxy media may 404 briefly; wait for a successful HEAD/GET.
+  private static func waitUntilMediaReachable(
+    _ urlString: String,
+    attempts: Int = 12,
+    delayNs: UInt64 = 2_000_000_000
+  ) async -> String? {
+    guard let url = URL(string: urlString), url.scheme?.hasPrefix("http") == true else {
+      return urlString
+    }
+    // Only retry our own media host (not arbitrary provider URLs).
+    let host = url.host ?? ""
+    let isOurs = host.contains("play-proxy") || url.path.contains("/v1/media/")
+    if !isOurs { return urlString }
+
+    for _ in 0..<attempts {
+      var req = URLRequest(url: url)
+      req.httpMethod = "HEAD"
+      req.timeoutInterval = 15
+      if let (_, resp) = try? await URLSession.shared.data(for: req),
+         let http = resp as? HTTPURLResponse,
+         (200...399).contains(http.statusCode)
+      {
+        return urlString
+      }
+      // Some edges refuse HEAD; try a Range GET of first byte.
+      var get = URLRequest(url: url)
+      get.setValue("bytes=0-0", forHTTPHeaderField: "Range")
+      get.timeoutInterval = 15
+      if let (_, resp) = try? await URLSession.shared.data(for: get),
+         let http = resp as? HTTPURLResponse,
+         (200...399).contains(http.statusCode)
+      {
+        return urlString
+      }
+      try? await Task.sleep(nanoseconds: delayNs)
+    }
+    return urlString
   }
 
   private func pushMediaHistory(_ item: MediaHistoryItem) {
@@ -2140,8 +2179,7 @@ final class AppState: ObservableObject {
     mediaBusy = true
     mediaError = nil
     mediaStatus =
-      "Generating \(model.model) · often 1-3 min. Stay in Prism; screen stays on. "
-        + "Locking or force-quitting can cancel the run."
+      "Generating \(model.model) · often 1-3 min. Safe to lock; job continues on the plane."
     lastVideoURL = nil
     beginVideoBackgroundWork()
     startMediaTimer()
@@ -2155,11 +2193,33 @@ final class AppState: ObservableObject {
       let res = try await controlPlane.generateVideo(
         model: model.model,
         prompt: prompt.isEmpty ? " " : prompt,
-        image: imageRef.isEmpty ? nil : imageRef
+        image: imageRef.isEmpty ? nil : imageRef,
+        async: true
       )
       try Task.checkCancellation()
-      lastVideoURL = res.video
-      lastVideoModel = res.model ?? model.model
+      let videoURL: String
+      if let id = res.id, res.video == nil {
+        mediaStatus = "Plane job \(id.prefix(12))… · poll while locked is fine"
+        let job = try await controlPlane.waitForJob(id: id, pollInterval: 4, timeout: 420)
+        if !job.isSuccess {
+          let msg = job.error?.message ?? job.error?.code ?? "Video job failed"
+          throw PrismError.serverError(msg)
+        }
+        guard let v = job.result?.video, !v.isEmpty else {
+          throw PrismError.serverError("Video job finished with no URL")
+        }
+        videoURL = v
+        lastVideoModel = job.result?.model ?? job.model ?? model.model
+      } else {
+        guard let v = res.video, !v.isEmpty else {
+          throw PrismError.serverError("Empty video payload")
+        }
+        videoURL = v
+        lastVideoModel = res.model ?? model.model
+      }
+      try Task.checkCancellation()
+      // Grok R2 may still be settling; brief HEAD/GET retry for playable URL.
+      lastVideoURL = await Self.waitUntilMediaReachable(videoURL) ?? videoURL
       mediaStatus = "Done · \(lastVideoModel ?? model.model) · \(mediaElapsedSeconds)s"
       pushMediaHistory(
         MediaHistoryItem(
@@ -2618,8 +2678,7 @@ final class AppState: ObservableObject {
     musicBusy = true
     musicError = nil
     musicStatus =
-      "Generating \(model.model) · often 2-4 min (up to ~5 with lyrics). Stay in Prism; screen stays on. "
-        + "Locking or force-quitting can cancel the run."
+      "Generating \(model.model) · often 2-4 min (up to ~5 with lyrics). Safe to lock; job continues on the plane."
     lastMusicAudio = nil
     lastMusicData = nil
     lastMusicLocalURL = nil
@@ -2636,17 +2695,33 @@ final class AppState: ObservableObject {
       let res = try await controlPlane.generateMusic(
         model: model.model,
         prompt: prompt,
-        lyrics: lyrics.isEmpty ? nil : lyrics
+        lyrics: lyrics.isEmpty ? nil : lyrics,
+        async: true
       )
       try Task.checkCancellation()
-      lastMusicAudio = res.audio
-      lastMusicData = res.audioData
-      lastMusicModel = res.model ?? model.model
+      if let id = res.id, res.audio == nil {
+        musicStatus = "Plane job \(id.prefix(12))… · poll while locked is fine"
+        let job = try await controlPlane.waitForJob(id: id, pollInterval: 4, timeout: 420)
+        if !job.isSuccess {
+          let msg = job.error?.message ?? job.error?.code ?? "Music job failed"
+          throw PrismError.serverError(msg)
+        }
+        guard let audio = job.result?.audio, !audio.isEmpty else {
+          throw PrismError.serverError("Music job finished with no audio")
+        }
+        lastMusicAudio = audio
+        lastMusicData = nil
+        lastMusicModel = job.result?.model ?? job.model ?? model.model
+      } else {
+        lastMusicAudio = res.audio
+        lastMusicData = res.audioData
+        lastMusicModel = res.model ?? model.model
+      }
+      try Task.checkCancellation()
       let detail = "\(lastMusicModel ?? model.model) · \(musicElapsedSeconds)s"
       musicStatus = "Done · \(detail)"
       Haptics.success()
       notifyMusicFinished(success: true, detail: detail)
-      // Do not auto-play (user controls Play). Optionally cache remote audio for Save.
       if lastMusicData == nil, let urlStr = lastMusicAudio {
         Task { await self.prefetchMusicIfNeeded(urlString: urlStr) }
       }
