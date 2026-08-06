@@ -1,5 +1,9 @@
 import Foundation
 
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+
 // Shared Codable shapes for Prism playground (`play.skyphusion.org` / self-host)
 // and the commercial control plane. Keep additive-friendly decoding: unknown
 // JSON fields are ignored by Codable defaults.
