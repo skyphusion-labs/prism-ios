@@ -6,10 +6,17 @@ import UIKit
 #endif
 
 /// In-memory chat turn for the shell UI.
+///
+/// Context is **client-side**: every send rebuilds the OpenAI message list from
+/// `turns` (plane) or reuses `conversationId` (playground). Switching
+/// `selectedModelId` never clears turns -- same chat, next model.
 struct ChatTurn: Identifiable, Equatable {
   let id: UUID
   let role: Role
   var text: String
+  /// Model that produced this assistant turn (nil for user / system).
+  var modelId: String?
+  var modelLabel: String?
 
   enum Role: String, Equatable {
     case user
@@ -17,10 +24,18 @@ struct ChatTurn: Identifiable, Equatable {
     case system
   }
 
-  init(id: UUID = UUID(), role: Role, text: String) {
+  init(
+    id: UUID = UUID(),
+    role: Role,
+    text: String,
+    modelId: String? = nil,
+    modelLabel: String? = nil
+  ) {
     self.id = id
     self.role = role
     self.text = text
+    self.modelId = modelId
+    self.modelLabel = modelLabel
   }
 }
 
@@ -181,8 +196,37 @@ final class AppState: ObservableObject {
       }
   }
 
+  /// All chat models ignoring search filter (selection must survive search/filter).
+  var allChatModels: [ModelEntry] {
+    models
+      .filter { ($0.type ?? "chat") == "chat" }
+      .filter(appliesSpendableFilter)
+  }
+
+  /// Resolve the selected chat model from the **full** chat catalog, not the search-filtered list.
+  /// Falling back to `chatModels.first` would send with a wrong model when the user is searching.
   var selectedModel: ModelEntry? {
-    chatModels.first { $0.model == selectedModelId } ?? chatModels.first
+    if let id = selectedModelId,
+       let m = allChatModels.first(where: { $0.model == id })
+        ?? models.first(where: { $0.model == id && ($0.type ?? "chat") == "chat" })
+    {
+      return m
+    }
+    return allChatModels.first ?? chatModels.first
+  }
+
+  /// Number of completed user/assistant pairs (context depth).
+  var chatContextTurnCount: Int {
+    turns.filter { $0.role == .user || ($0.role == .assistant && !$0.text.isEmpty) }.count
+  }
+
+  /// Change chat model without clearing transcript (web parity: switch model, keep context).
+  func selectChatModel(_ modelId: String) {
+    guard models.contains(where: { $0.model == modelId && ($0.type ?? "chat") == "chat" })
+            || modelId.isEmpty
+    else { return }
+    // Never clear turns / conversationId here -- that is only newChat().
+    selectedModelId = modelId.isEmpty ? nil : modelId
   }
 
   var selectedImageModel: ModelEntry? {
@@ -587,7 +631,16 @@ final class AppState: ObservableObject {
     draft = ""
     turns.append(ChatTurn(role: .user, text: text))
     let assistantId = UUID()
-    turns.append(ChatTurn(id: assistantId, role: .assistant, text: ""))
+    // Stamp the model now so mid-stream picker changes do not relabel this reply.
+    turns.append(
+      ChatTurn(
+        id: assistantId,
+        role: .assistant,
+        text: "",
+        modelId: model.model,
+        modelLabel: model.label ?? model.model
+      )
+    )
 
     isBusy = true
     errorMessage = nil
@@ -597,8 +650,10 @@ final class AppState: ObservableObject {
       try Task.checkCancellation()
       switch backend {
       case .playground:
+        // Server keeps history under conversationId; model can change per turn.
         try await sendPlayground(model: model, userText: text, assistantId: assistantId)
       case .controlPlane:
+        // Client resends full turns as messages; model is only the next completion's id.
         try await sendPlane(model: model, assistantId: assistantId)
       }
     } catch is CancellationError {
@@ -647,16 +702,21 @@ final class AppState: ObservableObject {
   }
 
   private func sendPlane(model: ModelEntry, assistantId: UUID) async throws {
+    // Full transcript → messages. Prior turns may have been produced by other models;
+    // that is intentional (same as play.skyphusion.org).
     var messages: [ControlPlaneChatMessage] = []
     for turn in turns where turn.id != assistantId {
       switch turn.role {
       case .user:
+        guard !turn.text.isEmpty else { continue }
         messages.append(ControlPlaneChatMessage(role: "user", content: turn.text))
       case .assistant:
-        if !turn.text.isEmpty {
-          messages.append(ControlPlaneChatMessage(role: "assistant", content: turn.text))
-        }
+        // Skip empty / cancelled shells so the next model does not see noise.
+        let t = turn.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty, !t.hasPrefix("(cancelled)"), !t.hasPrefix("(error)") else { continue }
+        messages.append(ControlPlaneChatMessage(role: "assistant", content: turn.text))
       case .system:
+        guard !turn.text.isEmpty else { continue }
         messages.append(ControlPlaneChatMessage(role: "system", content: turn.text))
       }
     }
@@ -855,5 +915,10 @@ final class AppState: ObservableObject {
     if let me = try? await controlPlane.me() {
       applyPlaneMe(me)
     }
+  }
+
+  /// StoreKit 2 signed transaction → prepaid credit on this device's account.
+  func redeemStoreTransaction(jws: String) async throws -> StoreRedeemResponse {
+    try await controlPlane.redeemStore(signedTransaction: jws)
   }
 }

@@ -90,9 +90,21 @@ struct SettingsView: View {
     .onAppear {
       draftPlayURL = state.baseURLString
       draftPlaneURL = state.controlPlaneURLString
+      store.redeemHandler = { jws in
+        try await state.redeemStoreTransaction(jws: jws)
+      }
+      store.onRedeemed = {
+        await state.refreshModels()
+      }
     }
     .task(id: state.backend) {
       if state.backend == .controlPlane {
+        store.redeemHandler = { jws in
+          try await state.redeemStoreTransaction(jws: jws)
+        }
+        store.onRedeemed = {
+          await state.refreshModels()
+        }
         await store.loadProducts()
       }
     }
@@ -117,7 +129,7 @@ struct SettingsView: View {
     } header: {
       Text("Balance")
     } footer: {
-      Text("Spendable is prepaid + monthly allowance. Top-ups apply after plane receipt redeem is live.")
+      Text("Spendable is prepaid + monthly allowance. Top-ups redeem via StoreKit to the plane.")
     }
   }
 
@@ -280,7 +292,7 @@ struct SettingsView: View {
       Text("Top up")
     } footer: {
       Text(
-        "Consumable App Store packs. Device key required so a future plane redeem can attach credit to this account. Server-side receipt redeem is not live yet."
+        "Consumable App Store packs. After purchase, the app sends the StoreKit 2 signed transaction to the plane (POST /v1/store/redeem) and refreshes balance."
       )
     }
   }

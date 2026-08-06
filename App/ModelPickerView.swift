@@ -15,6 +15,7 @@ struct ModelPickerView: View {
           .labelsHidden()
           .toggleStyle(.switch)
           .controlSize(.small)
+          .accessibilityLabel("Stream responses")
         Text("Stream")
           .font(.caption)
           .foregroundStyle(.secondary)
@@ -24,6 +25,7 @@ struct ModelPickerView: View {
         HStack {
           Image(systemName: "magnifyingglass")
             .foregroundStyle(.secondary)
+            .accessibilityHidden(true)
           TextField("Search models", text: $state.modelSearch)
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
@@ -34,6 +36,7 @@ struct ModelPickerView: View {
               Image(systemName: "xmark.circle.fill")
                 .foregroundStyle(.secondary)
             }
+            .accessibilityLabel("Clear model search")
           }
         }
         .font(.footnote)
@@ -46,21 +49,44 @@ struct ModelPickerView: View {
           .font(.footnote)
           .foregroundStyle(.secondary)
       } else {
+        // Selection writes via selectChatModel so we never clear chat context.
         Picker("Model", selection: Binding(
-          get: { state.selectedModelId ?? state.chatModels[0].model },
-          set: { state.selectedModelId = $0 }
+          get: {
+            // Prefer the real selection even if filtered out of the menu.
+            if let id = state.selectedModelId { return id }
+            return state.chatModels[0].model
+          },
+          set: { state.selectChatModel($0) }
         )) {
+          // Keep the currently selected model visible even when search would hide it.
+          if let sel = state.selectedModel,
+             !state.chatModels.contains(where: { $0.model == sel.model })
+          {
+            Text(label(for: sel) + " (selected)").tag(sel.model)
+          }
           ForEach(state.chatModels) { m in
             Text(label(for: m)).tag(m.model)
           }
         }
         .pickerStyle(.menu)
+        .accessibilityLabel("Chat model")
+        .accessibilityHint("Changing model keeps the same conversation")
+
         if let sel = state.selectedModel {
           Text(sel.model)
             .font(.caption2)
             .foregroundStyle(.secondary)
             .textSelection(.enabled)
         }
+      }
+
+      if state.chatContextTurnCount > 0 {
+        Text(
+          "\(state.chatContextTurnCount) turn\(state.chatContextTurnCount == 1 ? "" : "s") in this chat · switch models anytime; context is kept until New chat"
+        )
+        .font(.caption2)
+        .foregroundStyle(.secondary)
+        .accessibilityLabel("Conversation keeps context when you change models")
       }
     }
   }

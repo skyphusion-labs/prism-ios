@@ -1,5 +1,8 @@
 import SwiftUI
 import PrismKit
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct ChatView: View {
   @EnvironmentObject private var state: AppState
@@ -104,17 +107,47 @@ private struct TurnBubble: View {
     HStack {
       if turn.role == .user { Spacer(minLength: 40) }
       VStack(alignment: turn.role == .user ? .trailing : .leading, spacing: 4) {
-        Text(turn.role == .user ? "You" : "Prism")
-          .font(.caption2)
-          .foregroundStyle(.secondary)
-        Text(turn.text.isEmpty ? "…" : turn.text)
-          .textSelection(.enabled)
-          .padding(10)
-          .background(turn.role == .user ? Color.accentColor.opacity(0.15) : Color.secondary.opacity(0.12))
-          .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        HStack(spacing: 6) {
+          Text(turn.role == .user ? "You" : "Prism")
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+          if turn.role == .assistant, let label = turn.modelLabel ?? turn.modelId {
+            Text(label)
+              .font(.caption2)
+              .foregroundStyle(.tertiary)
+              .lineLimit(1)
+              .accessibilityLabel("Model \(label)")
+          }
+        }
+        Group {
+          if turn.text.isEmpty {
+            Text("…")
+          } else if let attr = try? AttributedString(
+            markdown: turn.text,
+            options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+          ) {
+            Text(attr)
+          } else {
+            Text(turn.text)
+          }
+        }
+        .textSelection(.enabled)
+        .padding(10)
+        .background(turn.role == .user ? Color.accentColor.opacity(0.15) : Color.secondary.opacity(0.12))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .contextMenu {
+          if !turn.text.isEmpty {
+            Button("Copy") {
+              #if canImport(UIKit)
+              UIPasteboard.general.string = turn.text
+              #endif
+            }
+          }
+        }
       }
       if turn.role != .user { Spacer(minLength: 40) }
     }
+    .accessibilityElement(children: .combine)
   }
 }
 
