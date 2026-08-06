@@ -246,6 +246,52 @@ public final class ControlPlaneClient: @unchecked Sendable {
     try await generateSpeech(SpeechGenerationRequest(model: model, input: input))
   }
 
+  /// `POST /v1/audio/transcriptions` -- metered STT; `audio` is base64 or data: URL.
+  public func transcribe(_ body: TranscriptionRequest) async throws -> TranscriptionResponse {
+    let key = try requireKey()
+    let res: TranscriptionResponse = try await http.sendJSON(
+      method: "POST",
+      path: "/v1/audio/transcriptions",
+      body: body,
+      bearer: key,
+      timeout: Self.nonChatTimeout
+    )
+    if let err = res.error {
+      throw PrismError.serverError(err.message ?? err.code ?? "transcription error")
+    }
+    guard let text = res.text, !text.isEmpty else {
+      throw PrismError.serverError("Empty transcript")
+    }
+    return res
+  }
+
+  public func transcribe(model: String, audio: String) async throws -> TranscriptionResponse {
+    try await transcribe(TranscriptionRequest(model: model, audio: audio))
+  }
+
+  /// `POST /v1/music/generations` -- metered music; `audio` is URL or inline asset.
+  public func generateMusic(_ body: MusicGenerationRequest) async throws -> MusicGenerationResponse {
+    let key = try requireKey()
+    let res: MusicGenerationResponse = try await http.sendJSON(
+      method: "POST",
+      path: "/v1/music/generations",
+      body: body,
+      bearer: key,
+      timeout: Self.nonChatTimeout
+    )
+    if let err = res.error {
+      throw PrismError.serverError(err.message ?? err.code ?? "music generation error")
+    }
+    guard let audio = res.audio, !audio.isEmpty else {
+      throw PrismError.serverError("Empty music payload")
+    }
+    return res
+  }
+
+  public func generateMusic(model: String, prompt: String, lyrics: String? = nil) async throws -> MusicGenerationResponse {
+    try await generateMusic(MusicGenerationRequest(model: model, prompt: prompt, lyrics: lyrics))
+  }
+
   // MARK: - Store
 
   /// Apply a StoreKit 2 signed transaction as prepaid credit (`POST /v1/store/redeem`).

@@ -756,6 +756,64 @@ public struct SpeechGenerationResponse: Codable, Sendable, Equatable {
   }
 }
 
+// MARK: - Control plane STT (`POST /v1/audio/transcriptions`)
+
+/// `POST /v1/audio/transcriptions` body. `audio` is raw base64 or a data: URL.
+public struct TranscriptionRequest: Codable, Sendable, Equatable {
+  public var model: String
+  public var audio: String
+
+  public init(model: String, audio: String) {
+    self.model = model
+    self.audio = audio
+  }
+}
+
+/// Plane STT envelope: transcript text.
+public struct TranscriptionResponse: Codable, Sendable, Equatable {
+  public let model: String?
+  public let text: String?
+  public let error: ControlPlaneErrorBody?
+}
+
+// MARK: - Control plane music (`POST /v1/music/generations`)
+
+/// `POST /v1/music/generations` body.
+public struct MusicGenerationRequest: Codable, Sendable, Equatable {
+  public var model: String
+  public var prompt: String
+  public var lyrics: String?
+
+  public init(model: String, prompt: String, lyrics: String? = nil) {
+    self.model = model
+    self.prompt = prompt
+    self.lyrics = lyrics
+  }
+}
+
+/// Plane music envelope: `audio` is a URL or inline base64/data asset.
+public struct MusicGenerationResponse: Codable, Sendable, Equatable {
+  public let model: String?
+  public let audio: String?
+  public let error: ControlPlaneErrorBody?
+
+  /// When `audio` is raw base64 or a data URL, decoded bytes; nil for https URLs.
+  public var audioData: Data? {
+    guard let raw = audio, !raw.isEmpty else { return nil }
+    if raw.hasPrefix("http://") || raw.hasPrefix("https://") { return nil }
+    var s = raw
+    if let r = s.range(of: "base64,") {
+      s = String(s[r.upperBound...])
+    }
+    return Data(base64Encoded: s, options: .ignoreUnknownCharacters)
+  }
+
+  public var audioURL: String? {
+    guard let raw = audio, raw.hasPrefix("http://") || raw.hasPrefix("https://") else { return nil }
+    return raw
+  }
+}
+
 public struct HealthResponse: Codable, Sendable, Equatable {
   public let ok: Bool
   public let ts: Int?

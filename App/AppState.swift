@@ -173,6 +173,8 @@ final class AppState: ObservableObject {
   @Published var selectedImageModelId: String?
   @Published var selectedVideoModelId: String?
   @Published var selectedSpeechModelId: String?
+  @Published var selectedSttModelId: String?
+  @Published var selectedMusicModelId: String?
   @Published var authMode: String?
 
   // MARK: - Chat
@@ -216,6 +218,23 @@ final class AppState: ObservableObject {
   @Published var speechBusy: Bool = false
   @Published var speechError: String?
   @Published var speechStatus: String?
+  /// STT: raw audio for next request (base64 or data: URL).
+  @Published var sttAudioPayload: String = ""
+  @Published var sttAudioLabel: String = ""
+  @Published var lastTranscript: String?
+  @Published var lastSttModel: String?
+  @Published var sttBusy: Bool = false
+  @Published var sttError: String?
+  @Published var sttStatus: String?
+  /// Music generation.
+  @Published var musicPrompt: String = ""
+  @Published var musicLyrics: String = ""
+  @Published var lastMusicAudio: String?
+  @Published var lastMusicData: Data?
+  @Published var lastMusicModel: String?
+  @Published var musicBusy: Bool = false
+  @Published var musicError: String?
+  @Published var musicStatus: String?
   /// Last user text that failed (for Retry).
   @Published private(set) var lastFailedChatText: String?
   @Published private(set) var canRetryLastChat: Bool = false
@@ -386,6 +405,22 @@ final class AppState: ObservableObject {
       .sorted { ($0.label ?? $0.model) < ($1.label ?? $1.model) }
   }
 
+  var sttModels: [ModelEntry] {
+    models
+      .filter { ($0.type ?? "") == "stt" }
+      .filter(appliesSpendableFilter)
+      .filter(matchesSearch)
+      .sorted { ($0.label ?? $0.model) < ($1.label ?? $1.model) }
+  }
+
+  var musicModels: [ModelEntry] {
+    models
+      .filter { ($0.type ?? "") == "music" }
+      .filter(appliesSpendableFilter)
+      .filter(matchesSearch)
+      .sorted { ($0.label ?? $0.model) < ($1.label ?? $1.model) }
+  }
+
   /// All chat models ignoring search filter (selection must survive search/filter).
   var allChatModels: [ModelEntry] {
     models
@@ -400,10 +435,36 @@ final class AppState: ObservableObject {
     return speechModels.first
   }
 
+  var selectedSttModel: ModelEntry? {
+    if let id = selectedSttModelId, let m = sttModels.first(where: { $0.model == id }) {
+      return m
+    }
+    return sttModels.first
+  }
+
+  var selectedMusicModel: ModelEntry? {
+    if let id = selectedMusicModelId, let m = musicModels.first(where: { $0.model == id }) {
+      return m
+    }
+    return musicModels.first
+  }
+
   var speechSpendPreview: String? { spendPreview(for: selectedSpeechModel) }
+  var sttSpendPreview: String? { spendPreview(for: selectedSttModel) }
+  var musicSpendPreview: String? { spendPreview(for: selectedMusicModel) }
 
   func selectSpeechModel(_ modelId: String) {
     selectedSpeechModelId = modelId.isEmpty ? nil : modelId
+    persistUIPrefs()
+  }
+
+  func selectSttModel(_ modelId: String) {
+    selectedSttModelId = modelId.isEmpty ? nil : modelId
+    persistUIPrefs()
+  }
+
+  func selectMusicModel(_ modelId: String) {
+    selectedMusicModelId = modelId.isEmpty ? nil : modelId
     persistUIPrefs()
   }
 
@@ -716,6 +777,12 @@ final class AppState: ObservableObject {
     if let m = try? secrets.get(SecretStoreKeys.selectedSpeechModel), !m.isEmpty {
       selectedSpeechModelId = m
     }
+    if let m = try? secrets.get(SecretStoreKeys.selectedSttModel), !m.isEmpty {
+      selectedSttModelId = m
+    }
+    if let m = try? secrets.get(SecretStoreKeys.selectedMusicModel), !m.isEmpty {
+      selectedMusicModelId = m
+    }
     if let s = try? secrets.get(SecretStoreKeys.useStream) {
       useStream = (s == "1" || s == "true")
     }
@@ -736,6 +803,8 @@ final class AppState: ObservableObject {
     try? secrets.set(selectedImageModelId, for: SecretStoreKeys.selectedImageModel)
     try? secrets.set(selectedVideoModelId, for: SecretStoreKeys.selectedVideoModel)
     try? secrets.set(selectedSpeechModelId, for: SecretStoreKeys.selectedSpeechModel)
+    try? secrets.set(selectedSttModelId, for: SecretStoreKeys.selectedSttModel)
+    try? secrets.set(selectedMusicModelId, for: SecretStoreKeys.selectedMusicModel)
     try? secrets.set(useStream ? "1" : "0", for: SecretStoreKeys.useStream)
     try? secrets.set(hideUnspendable ? "1" : "0", for: SecretStoreKeys.hideUnspendable)
   }
@@ -1172,6 +1241,13 @@ final class AppState: ObservableObject {
       selectedSpeechModelId = speechModels.first(where: { $0.model.contains("aura-2-en") })?.model
         ?? speechModels.first(where: { $0.model.contains("melotts") })?.model
         ?? speechModels.first?.model
+    }
+    if selectedSttModelId == nil || !sttModels.contains(where: { $0.model == selectedSttModelId }) {
+      selectedSttModelId = sttModels.first(where: { $0.model.contains("whisper") })?.model
+        ?? sttModels.first?.model
+    }
+    if selectedMusicModelId == nil || !musicModels.contains(where: { $0.model == selectedMusicModelId }) {
+      selectedMusicModelId = musicModels.first?.model
     }
     persistUIPrefs()
   }
@@ -1827,6 +1903,189 @@ final class AppState: ObservableObject {
     } catch {
       speechError = prismUserFacingError(error)
       speechStatus = nil
+      Haptics.error()
+    }
+  }
+
+  // MARK: - STT (transcription)
+
+  /// Load recorded or imported audio for transcription.
+  func setSttAudioData(_ data: Data, mime: String = "audio/mp4", label: String = "audio") {
+    let b64 = data.base64EncodedString()
+    sttAudioPayload = "data:\(mime);base64,\(b64)"
+    sttAudioLabel = "\(label) · \(data.count / 1024) KB"
+    sttError = nil
+  }
+
+  func clearSttAudio() {
+    sttAudioPayload = ""
+    sttAudioLabel = ""
+  }
+
+  func transcribeAudio() {
+    speechTask?.cancel()
+    speechTask = Task { await self.performTranscribe() }
+  }
+
+  func cancelStt() {
+    speechTask?.cancel()
+    speechTask = nil
+    sttBusy = false
+    sttStatus = nil
+    sttError = PrismError.cancelled.userFacingMessage
+  }
+
+  /// Push last transcript into chat draft.
+  func useTranscriptAsChatDraft() {
+    guard let t = lastTranscript, !t.isEmpty else { return }
+    draft = t
+    Haptics.light()
+  }
+
+  /// Push last transcript into TTS field.
+  func useTranscriptAsSpeech() {
+    guard let t = lastTranscript, !t.isEmpty else { return }
+    speechText = t
+    Haptics.light()
+  }
+
+  private func performTranscribe() async {
+    guard canUseMediaDoors else {
+      sttError = "Control plane + device key required for transcription."
+      return
+    }
+    if !isNetworkSatisfied {
+      sttError = "No network connection. Reconnect and try again."
+      Haptics.error()
+      return
+    }
+    let audio = sttAudioPayload.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !audio.isEmpty else {
+      sttError = "Record or import audio first."
+      return
+    }
+    guard let model = selectedSttModel else {
+      sttError = "Pick a transcription model."
+      return
+    }
+    sttBusy = true
+    sttError = nil
+    sttStatus = "Transcribing \(model.model)…"
+    lastTranscript = nil
+    defer { sttBusy = false }
+    do {
+      try Task.checkCancellation()
+      let res = try await controlPlane.transcribe(model: model.model, audio: audio)
+      try Task.checkCancellation()
+      let text = (res.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !text.isEmpty else {
+        sttError = "Empty transcript."
+        sttStatus = nil
+        return
+      }
+      lastTranscript = text
+      lastSttModel = res.model ?? model.model
+      sttStatus = "Done · \(lastSttModel ?? model.model)"
+      Haptics.success()
+      await refreshPlaneBalanceOnly()
+    } catch is CancellationError {
+      sttError = PrismError.cancelled.userFacingMessage
+      sttStatus = nil
+      Haptics.warning()
+    } catch {
+      sttError = prismUserFacingError(error)
+      sttStatus = nil
+      Haptics.error()
+    }
+  }
+
+  // MARK: - Music
+
+  private var musicTask: Task<Void, Never>?
+
+  func generateMusic() {
+    musicTask?.cancel()
+    musicTask = Task { await self.performGenerateMusic() }
+  }
+
+  func cancelMusic() {
+    musicTask?.cancel()
+    musicTask = nil
+    musicBusy = false
+    musicStatus = nil
+    musicError = PrismError.cancelled.userFacingMessage
+  }
+
+  func playLastMusic() {
+    if let data = lastMusicData {
+      #if canImport(AVFoundation) && os(iOS)
+      do {
+        try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+        try AVAudioSession.sharedInstance().setActive(true)
+        speechPlayer = try AVAudioPlayer(data: data)
+        speechPlayer?.prepareToPlay()
+        speechPlayer?.play()
+        Haptics.light()
+      } catch {
+        musicError = "Could not play audio: \(error.localizedDescription)"
+        Haptics.error()
+      }
+      #endif
+      return
+    }
+    // URL-only: open is handled by the view (Link / share).
+  }
+
+  private func performGenerateMusic() async {
+    guard canUseMediaDoors else {
+      musicError = "Control plane + device key required for music."
+      return
+    }
+    if !isNetworkSatisfied {
+      musicError = "No network connection. Reconnect and try again."
+      Haptics.error()
+      return
+    }
+    let prompt = musicPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !prompt.isEmpty else {
+      musicError = "Enter a music prompt."
+      return
+    }
+    guard let model = selectedMusicModel else {
+      musicError = "Pick a music model."
+      return
+    }
+    musicBusy = true
+    musicError = nil
+    musicStatus = "Generating \(model.model)…"
+    lastMusicAudio = nil
+    lastMusicData = nil
+    defer { musicBusy = false }
+    let lyrics = musicLyrics.trimmingCharacters(in: .whitespacesAndNewlines)
+    do {
+      try Task.checkCancellation()
+      let res = try await controlPlane.generateMusic(
+        model: model.model,
+        prompt: prompt,
+        lyrics: lyrics.isEmpty ? nil : lyrics
+      )
+      try Task.checkCancellation()
+      lastMusicAudio = res.audio
+      lastMusicData = res.audioData
+      lastMusicModel = res.model ?? model.model
+      musicStatus = "Done · \(lastMusicModel ?? model.model)"
+      Haptics.success()
+      if lastMusicData != nil {
+        playLastMusic()
+      }
+      await refreshPlaneBalanceOnly()
+    } catch is CancellationError {
+      musicError = PrismError.cancelled.userFacingMessage
+      musicStatus = nil
+      Haptics.warning()
+    } catch {
+      musicError = prismUserFacingError(error)
+      musicStatus = nil
       Haptics.error()
     }
   }
