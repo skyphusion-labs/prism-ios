@@ -140,7 +140,10 @@ struct SpeechGenerateView: View {
     } header: {
       Text("Input")
     } footer: {
-      Text("Aura-2 is billed per 1k characters; MeloTTS per audio minute. Audio plays when ready.")
+      Text(
+        "Aura-2 is billed per 1k characters; MeloTTS per audio minute. "
+          + "Audio plays when ready; use Stop to halt mid-clip."
+      )
     }
 
     if let status = state.speechStatus {
@@ -152,9 +155,15 @@ struct SpeechGenerateView: View {
     if state.lastSpeechData != nil {
       Section {
         Button { state.playLastSpeech() } label: {
-          Label("Play", systemImage: "play.circle.fill")
-            .frame(maxWidth: .infinity, alignment: .leading).frame(minHeight: 44)
+          if state.isSpeechPlaying {
+            Label("Stop", systemImage: "stop.circle.fill")
+              .frame(maxWidth: .infinity, alignment: .leading).frame(minHeight: 44)
+          } else {
+            Label("Play", systemImage: "play.circle.fill")
+              .frame(maxWidth: .infinity, alignment: .leading).frame(minHeight: 44)
+          }
         }
+        .accessibilityLabel(state.isSpeechPlaying ? "Stop speech" : "Play generated speech")
         #if canImport(UIKit)
         Button {
           if let data = state.lastSpeechData {

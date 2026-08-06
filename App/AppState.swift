@@ -250,6 +250,8 @@ final class AppState: ObservableObject {
   @Published var speechBusy: Bool = false
   @Published var speechError: String?
   @Published var speechStatus: String?
+  /// True while in-app TTS playback is running.
+  @Published private(set) var isSpeechPlaying: Bool = false
   /// STT: raw audio for next request (base64 or data: URL).
   @Published var sttAudioPayload: String = ""
   @Published var sttAudioLabel: String = ""
@@ -345,6 +347,7 @@ final class AppState: ObservableObject {
   private var musicStreamPlayer: AVPlayer?
   private var musicEndObserver: NSObjectProtocol?
   private let musicPlayerFinish = AudioPlayerFinishRelay()
+  private let speechPlayerFinish = AudioPlayerFinishRelay()
   #endif
   private static let mediaHistoryCap = 20
   private static let sessionCap = 50
@@ -2206,21 +2209,48 @@ final class AppState: ObservableObject {
     generateSpeech()
   }
 
+  /// Play last TTS result. If already playing, stops (same control as Stop).
   func playLastSpeech() {
-    guard let data = lastSpeechData else { return }
     #if canImport(AVFoundation) && os(iOS)
+    if isSpeechPlaying {
+      stopSpeechPlayback()
+      return
+    }
+    guard let data = lastSpeechData else { return }
     do {
       try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
       try AVAudioSession.sharedInstance().setActive(true)
-      speechPlayer = try AVAudioPlayer(data: data)
-      speechPlayer?.prepareToPlay()
-      speechPlayer?.play()
+      // One audio stream at a time in the app shell.
+      if isMusicPlaying { stopMusicPlayback() }
+      speechPlayer?.stop()
+      speechPlayerFinish.onFinish = { [weak self] in
+        Task { @MainActor in
+          self?.isSpeechPlaying = false
+        }
+      }
+      let player = try AVAudioPlayer(data: data)
+      player.delegate = speechPlayerFinish
+      speechPlayer = player
+      player.prepareToPlay()
+      player.play()
+      isSpeechPlaying = true
       Haptics.light()
     } catch {
       speechError = "Could not play audio: \(error.localizedDescription)"
+      isSpeechPlaying = false
       Haptics.error()
     }
     #endif
+  }
+
+  /// Stop in-app TTS playback. Does not affect music.
+  func stopSpeechPlayback() {
+    #if canImport(AVFoundation) && os(iOS)
+    speechPlayer?.stop()
+    speechPlayer = nil
+    #endif
+    isSpeechPlaying = false
+    Haptics.light()
   }
 
   private func performGenerateSpeech() async {
@@ -2245,6 +2275,7 @@ final class AppState: ObservableObject {
     speechBusy = true
     speechError = nil
     speechStatus = "Synthesizing \(model.model)…"
+    stopSpeechPlayback()
     lastSpeechData = nil
     defer { speechBusy = false }
     do {
@@ -2400,6 +2431,8 @@ final class AppState: ObservableObject {
       Haptics.error()
       return
     }
+    // One audio stream at a time in the app shell.
+    if isSpeechPlaying { stopSpeechPlayback() }
     clearMusicEndObserver()
     if let data = lastMusicData {
       do {
