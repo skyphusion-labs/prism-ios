@@ -257,6 +257,8 @@ final class AppState: ObservableObject {
   @Published var musicBusy: Bool = false
   @Published var musicError: String?
   @Published var musicStatus: String?
+  /// Seconds elapsed while a music job is running (mirrors mediaElapsedSeconds).
+  @Published var musicElapsedSeconds: Int = 0
   /// Last user text that failed (for Retry).
   @Published private(set) var lastFailedChatText: String?
   @Published private(set) var canRetryLastChat: Bool = false
@@ -322,9 +324,11 @@ final class AppState: ObservableObject {
   private var mediaTask: Task<Void, Never>?
   private var speechTask: Task<Void, Never>?
   private var mediaTimerTask: Task<Void, Never>?
+  private var musicTimerTask: Task<Void, Never>?
   private var pathMonitor: NWPathMonitor?
   #if canImport(AVFoundation) && os(iOS)
   private var speechPlayer: AVAudioPlayer?
+  private var musicStreamPlayer: AVPlayer?
   #endif
   private static let mediaHistoryCap = 20
   private static let sessionCap = 50
@@ -686,6 +690,36 @@ final class AppState: ObservableObject {
   private func stopMediaTimer() {
     mediaTimerTask?.cancel()
     mediaTimerTask = nil
+  }
+
+  private func startMusicTimer() {
+    musicTimerTask?.cancel()
+    musicElapsedSeconds = 0
+    musicTimerTask = Task { @MainActor in
+      while !Task.isCancelled {
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        if Task.isCancelled { break }
+        musicElapsedSeconds += 1
+      }
+    }
+  }
+
+  private func stopMusicTimer() {
+    musicTimerTask?.cancel()
+    musicTimerTask = nil
+  }
+
+  /// Live status line for the music form (elapsed + rough estimate).
+  var musicElapsedLabel: String {
+    let s = musicElapsedSeconds
+    let m = s / 60
+    let r = s % 60
+    let elapsed = m > 0 ? String(format: "%d:%02d", m, r) : "\(s)s"
+    // MiniMax full tracks often land in ~30–90s; longer if vocals/lyrics.
+    let estimate = musicLyrics.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      ? "often 30–90s"
+      : "often 1–2 min"
+    return "Elapsed \(elapsed) · \(estimate) · safe to leave tab"
   }
 
   private func pushMediaHistory(_ item: MediaHistoryItem) {
@@ -2327,17 +2361,27 @@ final class AppState: ObservableObject {
   func cancelMusic() {
     musicTask?.cancel()
     musicTask = nil
+    stopMusicTimer()
     musicBusy = false
     musicStatus = nil
     musicError = PrismError.cancelled.userFacingMessage
   }
 
+  /// Play last music result: inline bytes, or stream remote https URL.
   func playLastMusic() {
+    #if canImport(AVFoundation) && os(iOS)
+    do {
+      try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+      try AVAudioSession.sharedInstance().setActive(true)
+    } catch {
+      musicError = "Could not start audio session: \(error.localizedDescription)"
+      Haptics.error()
+      return
+    }
     if let data = lastMusicData {
-      #if canImport(AVFoundation) && os(iOS)
       do {
-        try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
-        try AVAudioSession.sharedInstance().setActive(true)
+        musicStreamPlayer?.pause()
+        musicStreamPlayer = nil
         speechPlayer = try AVAudioPlayer(data: data)
         speechPlayer?.prepareToPlay()
         speechPlayer?.play()
@@ -2346,10 +2390,70 @@ final class AppState: ObservableObject {
         musicError = "Could not play audio: \(error.localizedDescription)"
         Haptics.error()
       }
-      #endif
       return
     }
-    // URL-only: open is handled by the view (Link / share).
+    if let urlStr = lastMusicAudio,
+       let url = Self.musicPlaybackURL(from: urlStr)
+    {
+      speechPlayer?.stop()
+      speechPlayer = nil
+      let item = AVPlayerItem(url: url)
+      let player = AVPlayer(playerItem: item)
+      musicStreamPlayer = player
+      player.play()
+      Haptics.light()
+      return
+    }
+    musicError = "No playable audio on this result."
+    Haptics.warning()
+    #endif
+  }
+
+  /// Open remote music URL in Safari (Form `Link` is unreliable on some iOS builds).
+  @discardableResult
+  func openLastMusicURL() -> Bool {
+    guard let urlStr = lastMusicAudio,
+          let url = Self.musicPlaybackURL(from: urlStr)
+    else {
+      musicError = "No audio URL on this result."
+      Haptics.warning()
+      return false
+    }
+    #if canImport(UIKit)
+    UIApplication.shared.open(url, options: [:]) { ok in
+      Task { @MainActor in
+        if !ok {
+          self.musicError = "Could not open audio URL. Use Share instead."
+          Haptics.error()
+        } else {
+          Haptics.light()
+        }
+      }
+    }
+    return true
+    #else
+    return false
+    #endif
+  }
+
+  /// Parse MiniMax / CF signed URLs (percent-encoded query stays intact).
+  private static func musicPlaybackURL(from raw: String) -> URL? {
+    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return nil }
+    if let u = URL(string: trimmed), let scheme = u.scheme?.lowercased(),
+       scheme == "http" || scheme == "https"
+    {
+      return u
+    }
+    // Fallback for partially encoded hosts.
+    if let encoded = trimmed.addingPercentEncoding(withAllowedCharacters: .urlFragmentAllowed),
+       let u = URL(string: encoded),
+       let scheme = u.scheme?.lowercased(),
+       scheme == "http" || scheme == "https"
+    {
+      return u
+    }
+    return nil
   }
 
   private func performGenerateMusic() async {
@@ -2376,7 +2480,11 @@ final class AppState: ObservableObject {
     musicStatus = "Generating \(model.model)…"
     lastMusicAudio = nil
     lastMusicData = nil
-    defer { musicBusy = false }
+    startMusicTimer()
+    defer {
+      stopMusicTimer()
+      musicBusy = false
+    }
     let lyrics = musicLyrics.trimmingCharacters(in: .whitespacesAndNewlines)
     do {
       try Task.checkCancellation()
@@ -2389,19 +2497,18 @@ final class AppState: ObservableObject {
       lastMusicAudio = res.audio
       lastMusicData = res.audioData
       lastMusicModel = res.model ?? model.model
-      musicStatus = "Done · \(lastMusicModel ?? model.model)"
+      musicStatus = "Done · \(lastMusicModel ?? model.model) · \(musicElapsedSeconds)s"
       Haptics.success()
-      if lastMusicData != nil {
-        playLastMusic()
-      }
+      // Auto-play: bytes in-app, or stream remote URL.
+      playLastMusic()
       await refreshPlaneBalanceOnly()
     } catch is CancellationError {
       musicError = PrismError.cancelled.userFacingMessage
-      musicStatus = nil
+      musicStatus = "Cancelled after \(musicElapsedSeconds)s"
       Haptics.warning()
     } catch {
       musicError = prismUserFacingError(error)
-      musicStatus = nil
+      musicStatus = "Failed after \(musicElapsedSeconds)s"
       Haptics.error()
     }
   }

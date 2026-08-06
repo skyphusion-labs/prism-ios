@@ -7,6 +7,7 @@ import UIKit
 /// Control-plane music generation (`POST /v1/music/generations`).
 struct MusicGenerateView: View {
   @EnvironmentObject private var state: AppState
+  @Environment(\.openURL) private var openURL
   @State private var sharePayload: SharePayload?
 
   var body: some View {
@@ -67,9 +68,19 @@ struct MusicGenerateView: View {
             Text(preview).font(.footnote).foregroundStyle(.secondary)
           }
           if state.musicBusy {
-            HStack {
+            HStack(alignment: .top, spacing: 10) {
               ProgressView()
-              Text(state.musicStatus ?? "Generating…").font(.footnote).foregroundStyle(.secondary)
+              VStack(alignment: .leading, spacing: 4) {
+                Text(state.musicStatus ?? "Generating…")
+                  .font(.footnote)
+                  .foregroundStyle(.secondary)
+                Text(state.musicElapsedLabel)
+                  .font(.caption2)
+                  .foregroundStyle(.secondary)
+                  .accessibilityLabel(
+                    "Generating, \(state.musicElapsedSeconds) seconds elapsed"
+                  )
+              }
             }
             Button(role: .destructive) { state.cancelMusic() } label: {
               Text("Cancel").frame(maxWidth: .infinity).frame(minHeight: 44)
@@ -84,10 +95,10 @@ struct MusicGenerateView: View {
         } header: {
           Text("Prompt")
         } footer: {
-          Text("Unit-priced per request. Long runs may take a minute.")
+          Text("Unit-priced per request. Full tracks often take 30–90s (longer with lyrics).")
         }
 
-        if let status = state.musicStatus {
+        if let status = state.musicStatus, !state.musicBusy {
           Section { Text(status).font(.footnote).foregroundStyle(.secondary) }
         }
         if let err = state.musicError {
@@ -96,22 +107,42 @@ struct MusicGenerateView: View {
 
         if state.lastMusicData != nil || state.lastMusicAudio != nil {
           Section {
-            if state.lastMusicData != nil {
-              Button { state.playLastMusic() } label: {
-                Label("Play", systemImage: "play.circle.fill")
-                  .frame(maxWidth: .infinity, alignment: .leading).frame(minHeight: 44)
-              }
+            // Always offer Play when we have bytes or a remote URL (stream via AVPlayer).
+            Button {
+              state.playLastMusic()
+            } label: {
+              Label("Play", systemImage: "play.circle.fill")
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(minHeight: 44)
             }
-            if let urlStr = state.lastMusicAudio, let url = URL(string: urlStr),
-               url.scheme?.hasPrefix("http") == true
+            .accessibilityLabel("Play generated music")
+
+            if let urlStr = state.lastMusicAudio,
+               let url = URL(string: urlStr),
+               let scheme = url.scheme?.lowercased(),
+               scheme == "http" || scheme == "https"
             {
-              Link("Open audio URL", destination: url)
-              Text(urlStr).font(.caption2).foregroundStyle(.secondary).textSelection(.enabled)
+              // Form + SwiftUI Link is flaky on device; open via UIApplication / openURL.
+              Button {
+                if !state.openLastMusicURL() {
+                  openURL(url)
+                }
+              } label: {
+                Label("Open audio URL", systemImage: "safari")
+                  .frame(maxWidth: .infinity, alignment: .leading)
+                  .frame(minHeight: 44)
+              }
+              .accessibilityLabel("Open audio URL in browser")
+              Text(urlStr)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
             }
             #if canImport(UIKit)
             Button {
               if let data = state.lastMusicData {
-                let url = FileManager.default.temporaryDirectory.appendingPathComponent("prism-music.mp3")
+                let url = FileManager.default.temporaryDirectory
+                  .appendingPathComponent("prism-music.mp3")
                 try? data.write(to: url)
                 sharePayload = SharePayload(items: [url])
               } else if let s = state.lastMusicAudio, let url = URL(string: s) {
@@ -119,6 +150,8 @@ struct MusicGenerateView: View {
               }
             } label: {
               Label("Share", systemImage: "square.and.arrow.up")
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(minHeight: 44)
             }
             #endif
             if let model = state.lastMusicModel {
