@@ -19,6 +19,12 @@ public enum SecretStoreKeys {
   /// Playground session token value (cookie `__Host-prism_session`).
   public static let playgroundSessionCookie = "org.skyphusion.prism.playground.session-cookie"
   public static let playgroundSessionUsername = "org.skyphusion.prism.playground.session-username"
+  /// UI prefs (model picks, stream, filters) -- non-secret but Keychain keeps one store.
+  public static let selectedChatModel = "org.skyphusion.prism.pref.chat-model"
+  public static let selectedImageModel = "org.skyphusion.prism.pref.image-model"
+  public static let selectedVideoModel = "org.skyphusion.prism.pref.video-model"
+  public static let useStream = "org.skyphusion.prism.pref.use-stream"
+  public static let hideUnspendable = "org.skyphusion.prism.pref.hide-unspendable"
 }
 
 /// In-memory store (tests + Linux).

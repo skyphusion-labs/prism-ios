@@ -11,7 +11,10 @@ struct ModelPickerView: View {
           .font(.subheadline)
           .foregroundStyle(.secondary)
         Spacer()
-        Toggle("Stream", isOn: $state.useStream)
+        Toggle("Stream", isOn: Binding(
+          get: { state.useStream },
+          set: { state.setUseStream($0) }
+        ))
           .labelsHidden()
           .toggleStyle(.switch)
           .controlSize(.small)
@@ -40,7 +43,10 @@ struct ModelPickerView: View {
           }
         }
         .font(.footnote)
-        Toggle("Hide unspendable", isOn: $state.hideUnspendable)
+        Toggle("Hide unspendable", isOn: Binding(
+          get: { state.hideUnspendable },
+          set: { state.setHideUnspendable($0) }
+        ))
           .font(.caption)
       }
 

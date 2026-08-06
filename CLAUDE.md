@@ -7,8 +7,8 @@ Guidance for agents working in this repository.
 **AGPL iOS client for Prism.** Shared Swift package (`PrismKit`) plus a SwiftUI app shell
 (`App/` + `Prism.xcodeproj`) for login, model pick, and chat against the playground Worker.
 
-**Status:** kit 0.6.2 (plane health probe, haptics, chat empty state, foreground refresh; plus 0.6.1
-model-switch context, store redeem, spend preview, media history, retry). ASC app `6798391677`.
+**Status:** kit 0.6.3 (persist model/stream prefs, streaming indicator, share transcript, image
+retry, About links, brand tint; plus 0.6.2 health/haptics/empty). ASC app `6798391677`.
 Aviation-grade `main`.
 
 ## Related

@@ -7,6 +7,7 @@ import UIKit
 struct ChatView: View {
   @EnvironmentObject private var state: AppState
   @FocusState private var draftFocused: Bool
+  @State private var sharePayload: ShareTextPayload?
 
   var body: some View {
     VStack(spacing: 0) {
@@ -34,19 +35,28 @@ struct ChatView: View {
                 .padding(.top, 48)
             }
             ForEach(state.turns) { turn in
-              TurnBubble(turn: turn)
-                .id(turn.id)
+              TurnBubble(
+                turn: turn,
+                isStreaming: state.isBusy
+                  && turn.role == .assistant
+                  && turn.id == state.turns.last?.id
+                  && turn.text.isEmpty,
+                onUseAsDraft: { state.useTurnAsDraft(turn) }
+              )
+              .id(turn.id)
             }
           }
           .padding()
         }
+        .scrollDismissesKeyboard(.interactively)
         .refreshable {
           await state.refreshModels()
         }
         .onChange(of: state.turns.count) { _ in
-          if let last = state.turns.last {
-            withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
-          }
+          scrollToBottom(proxy)
+        }
+        .onChange(of: state.turns.last?.text) { _ in
+          scrollToBottom(proxy)
         }
       }
 
@@ -118,6 +128,19 @@ struct ChatView: View {
         .accessibilityLabel("Start new chat")
         .accessibilityHint("Clears conversation context")
       }
+      if !state.turns.isEmpty {
+        ToolbarItem(placement: .topBarTrailing) {
+          Button {
+            let text = state.chatTranscriptText()
+            guard !text.isEmpty else { return }
+            sharePayload = ShareTextPayload(text: text)
+            Haptics.light()
+          } label: {
+            Image(systemName: "square.and.arrow.up")
+          }
+          .accessibilityLabel("Share transcript")
+        }
+      }
       if state.backend == .controlPlane, let bal = state.planeBalance, !bal.isEmpty {
         ToolbarItem(placement: .topBarTrailing) {
           Text(bal)
@@ -134,6 +157,20 @@ struct ChatView: View {
           }
         }
       }
+    }
+    .sheet(item: $sharePayload) { payload in
+      #if canImport(UIKit)
+      ActivityView(items: [payload.text])
+      #else
+      Text(payload.text)
+      #endif
+    }
+  }
+
+  private func scrollToBottom(_ proxy: ScrollViewProxy) {
+    guard let last = state.turns.last else { return }
+    withAnimation(.easeOut(duration: 0.15)) {
+      proxy.scrollTo(last.id, anchor: .bottom)
     }
   }
 }
@@ -182,6 +219,8 @@ private struct ChatEmptyState: View {
 
 private struct TurnBubble: View {
   let turn: ChatTurn
+  var isStreaming: Bool = false
+  var onUseAsDraft: (() -> Void)?
 
   var body: some View {
     HStack {
@@ -200,7 +239,15 @@ private struct TurnBubble: View {
           }
         }
         Group {
-          if turn.text.isEmpty {
+          if isStreaming {
+            HStack(spacing: 8) {
+              ProgressView()
+                .controlSize(.small)
+              Text("Thinking…")
+                .foregroundStyle(.secondary)
+            }
+            .accessibilityLabel("Generating response")
+          } else if turn.text.isEmpty {
             Text("…")
           } else if let attr = try? AttributedString(
             markdown: turn.text,
@@ -222,6 +269,11 @@ private struct TurnBubble: View {
               #if canImport(UIKit)
               UIPasteboard.general.string = turn.text
               #endif
+              Haptics.light()
+            }
+            Button("Use as draft") {
+              onUseAsDraft?()
+              Haptics.light()
             }
           }
         }
@@ -231,6 +283,21 @@ private struct TurnBubble: View {
     .accessibilityElement(children: .combine)
   }
 }
+
+private struct ShareTextPayload: Identifiable {
+  let id = UUID()
+  let text: String
+}
+
+#if canImport(UIKit)
+private struct ActivityView: UIViewControllerRepresentable {
+  let items: [Any]
+  func makeUIViewController(context: Context) -> UIActivityViewController {
+    UIActivityViewController(activityItems: items, applicationActivities: nil)
+  }
+  func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+#endif
 
 #Preview {
   NavigationStack {
