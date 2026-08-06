@@ -50,8 +50,9 @@ CI runs package tests on Ubuntu. The iOS app is built with Xcode locally (not in
 
 ## Status
 
-- Kit **0.6.1**: plane default; model switch keeps chat context; StoreKit → plane redeem (0.4.15+);
-  spend preview; media history; chat/video retry; elapsed timer; a11y hit targets; secret redaction.
+- Kit **0.6.2**: plane health on bootstrap + Settings; haptics on chat/media/enroll/top-up; chat empty
+  state; foreground balance refresh; pull-to-refresh models. Prior: model switch keeps context;
+  StoreKit → plane redeem (0.4.15+); spend preview; media history; retry; a11y; secret redaction.
 - App Store Connect: app `6798391677`, three consumable credit IAPs. See `docs/TESTFLIGHT.md`,
   `docs/ASC-CHECKLIST.md`.
 

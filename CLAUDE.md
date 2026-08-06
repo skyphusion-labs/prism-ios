@@ -7,8 +7,9 @@ Guidance for agents working in this repository.
 **AGPL iOS client for Prism.** Shared Swift package (`PrismKit`) plus a SwiftUI app shell
 (`App/` + `Prism.xcodeproj`) for login, model pick, and chat against the playground Worker.
 
-**Status:** kit 0.6.1 (context-preserving model switch, store redeem client, spend preview, media
-history, retry, TestFlight/ASC docs). ASC app `6798391677`. Aviation-grade `main`.
+**Status:** kit 0.6.2 (plane health probe, haptics, chat empty state, foreground refresh; plus 0.6.1
+model-switch context, store redeem, spend preview, media history, retry). ASC app `6798391677`.
+Aviation-grade `main`.
 
 ## Related
 
@@ -55,7 +56,8 @@ asc apps list
 
 Setup steps: `docs/apple-cli.md`. Command catalog: `docs/ASC.md`. Credentials live in
 macOS keychain (or `chmod 600` env under `~/.config/skyphusion/`); never in the repo.
-Plane store-receipt / commercial pricing remain deferred on the control-plane contract.
+StoreKit 2 redeem is live on plane 0.4.15+ (`POST /v1/store/redeem`); IAP catalog in
+`Configuration.storekit` + ASC.
 
 ## CI
 

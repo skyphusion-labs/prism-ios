@@ -28,12 +28,20 @@ struct ChatView: View {
       ScrollViewReader { proxy in
         ScrollView {
           LazyVStack(alignment: .leading, spacing: 12) {
+            if state.turns.isEmpty {
+              ChatEmptyState()
+                .frame(maxWidth: .infinity)
+                .padding(.top, 48)
+            }
             ForEach(state.turns) { turn in
               TurnBubble(turn: turn)
                 .id(turn.id)
             }
           }
           .padding()
+        }
+        .refreshable {
+          await state.refreshModels()
         }
         .onChange(of: state.turns.count) { _ in
           if let last = state.turns.last {
@@ -104,10 +112,20 @@ struct ChatView: View {
       ToolbarItem(placement: .topBarLeading) {
         Button("New chat") {
           state.newChat()
+          Haptics.light()
         }
         .disabled(state.turns.isEmpty && state.conversationId == nil)
         .accessibilityLabel("Start new chat")
         .accessibilityHint("Clears conversation context")
+      }
+      if state.backend == .controlPlane, let bal = state.planeBalance, !bal.isEmpty {
+        ToolbarItem(placement: .topBarTrailing) {
+          Text(bal)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .accessibilityLabel("Balance \(bal)")
+        }
       }
       if state.backend == .playground, state.authenticated {
         ToolbarItem(placement: .topBarTrailing) {
@@ -117,6 +135,48 @@ struct ChatView: View {
         }
       }
     }
+  }
+}
+
+/// First-paint guidance when the transcript is empty.
+private struct ChatEmptyState: View {
+  @EnvironmentObject private var state: AppState
+
+  var body: some View {
+    VStack(spacing: 12) {
+      Image(systemName: "bubble.left.and.bubble.right")
+        .font(.system(size: 40))
+        .foregroundStyle(.secondary)
+        .accessibilityHidden(true)
+      Text("Start a conversation")
+        .font(.title3.weight(.semibold))
+      Text(subtitle)
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
+        .multilineTextAlignment(.center)
+        .fixedSize(horizontal: false, vertical: true)
+      if let model = state.selectedModel {
+        Text("Using \(model.label ?? model.model)")
+          .font(.caption)
+          .foregroundStyle(.tertiary)
+      }
+      if state.backend == .controlPlane, state.planeHealthOK == false {
+        Text("Plane health: unreachable. Pull to refresh or check Settings.")
+          .font(.caption)
+          .foregroundStyle(.orange)
+          .multilineTextAlignment(.center)
+      }
+    }
+    .frame(maxWidth: 320)
+    .frame(maxWidth: .infinity)
+    .accessibilityElement(children: .combine)
+  }
+
+  private var subtitle: String {
+    if state.backend == .controlPlane {
+      return "Messages stay on this device. Switch models anytime; context is kept until New chat."
+    }
+    return "Pick a model above and type a message. Streaming is on by default when the model supports it."
   }
 }
 
