@@ -212,10 +212,11 @@ public final class ControlPlaneClient: @unchecked Sendable {
 
   // MARK: - Image / video (unit-priced)
 
-  /// Long-running non-chat doors; client wait above plane's nonchat ceiling (180s).
-  public static let nonChatTimeout: TimeInterval = 200
-  /// Music + optional plane rehost can exceed 200s wall time; keep a wider budget.
-  public static let musicTimeout: TimeInterval = 360
+  /// Long-running non-chat doors; client wait above plane nonchat default (300s since 0.4.26).
+  public static let nonChatTimeout: TimeInterval = 320
+  /// Music + R2 rehost: full MiniMax tracks often ~2-4 min wall (measured ~233s); plane
+  /// nonchat hard max 360s. Client budget sits above that for tail/rehost latency.
+  public static let musicTimeout: TimeInterval = 420
 
   /// `POST /v1/images/generations` -- returns `data[].b64_json`.
   public func generateImage(_ body: ImageGenerationRequest) async throws -> ImageGenerationResponse {

@@ -99,9 +99,10 @@ struct MusicGenerateView: View {
           Text("Prompt")
         } footer: {
           Text(
-            "Unit-priced per request. Full tracks often take 30–90s (longer with lyrics). "
-              + "You can switch tabs inside Prism; locking the phone or leaving the app may still "
-              + "interrupt a long request (iOS background limits). A notification fires when done."
+            "Unit-priced per request. Full tracks often take 2-4 minutes (up to ~5 with lyrics; "
+              + "plane allows up to 5 min). You can switch tabs inside Prism; locking the phone or "
+              + "leaving the app may still interrupt a long request (iOS background limits). "
+              + "A notification fires when done."
           )
         }
 
