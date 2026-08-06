@@ -118,11 +118,17 @@ struct MusicGenerateView: View {
             Button {
               state.playLastMusic()
             } label: {
-              Label("Play", systemImage: "play.circle.fill")
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .frame(minHeight: 44)
+              if state.isMusicPlaying {
+                Label("Stop", systemImage: "stop.circle.fill")
+                  .frame(maxWidth: .infinity, alignment: .leading)
+                  .frame(minHeight: 44)
+              } else {
+                Label("Play", systemImage: "play.circle.fill")
+                  .frame(maxWidth: .infinity, alignment: .leading)
+                  .frame(minHeight: 44)
+              }
             }
-            .accessibilityLabel("Play generated music")
+            .accessibilityLabel(state.isMusicPlaying ? "Stop music" : "Play generated music")
 
             if let url = state.lastMusicPlaybackURL {
               Button {

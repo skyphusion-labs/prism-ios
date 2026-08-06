@@ -13,6 +13,16 @@ import UserNotifications
 import WidgetKit
 #endif
 
+#if canImport(AVFoundation) && os(iOS)
+/// Relays `AVAudioPlayer` end-of-track so music UI can clear `isMusicPlaying`.
+private final class AudioPlayerFinishRelay: NSObject, AVAudioPlayerDelegate {
+  var onFinish: (() -> Void)?
+  func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+    onFinish?()
+  }
+}
+#endif
+
 /// One chat turn for the shell UI (also persisted in multi-session storage).
 ///
 /// Context is **client-side**: every send rebuilds the OpenAI message list from
@@ -259,6 +269,8 @@ final class AppState: ObservableObject {
   @Published var musicStatus: String?
   /// Seconds elapsed while a music job is running (mirrors mediaElapsedSeconds).
   @Published var musicElapsedSeconds: Int = 0
+  /// True while in-app music playback is running (local bytes or streamed URL).
+  @Published private(set) var isMusicPlaying: Bool = false
   /// Last user text that failed (for Retry).
   @Published private(set) var lastFailedChatText: String?
   @Published private(set) var canRetryLastChat: Bool = false
@@ -328,7 +340,11 @@ final class AppState: ObservableObject {
   private var pathMonitor: NWPathMonitor?
   #if canImport(AVFoundation) && os(iOS)
   private var speechPlayer: AVAudioPlayer?
+  /// Local music bytes (kept separate from speech so Stop / TTS do not share a player).
+  private var musicLocalPlayer: AVAudioPlayer?
   private var musicStreamPlayer: AVPlayer?
+  private var musicEndObserver: NSObjectProtocol?
+  private let musicPlayerFinish = AudioPlayerFinishRelay()
   #endif
   private static let mediaHistoryCap = 20
   private static let sessionCap = 50
@@ -2369,8 +2385,13 @@ final class AppState: ObservableObject {
   }
 
   /// Play last music result: inline bytes, or stream remote https URL.
+  /// If already playing, stops (same control as Stop).
   func playLastMusic() {
     #if canImport(AVFoundation) && os(iOS)
+    if isMusicPlaying {
+      stopMusicPlayback()
+      return
+    }
     do {
       try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
       try AVAudioSession.sharedInstance().setActive(true)
@@ -2379,16 +2400,27 @@ final class AppState: ObservableObject {
       Haptics.error()
       return
     }
+    clearMusicEndObserver()
     if let data = lastMusicData {
       do {
         musicStreamPlayer?.pause()
         musicStreamPlayer = nil
-        speechPlayer = try AVAudioPlayer(data: data)
-        speechPlayer?.prepareToPlay()
-        speechPlayer?.play()
+        musicLocalPlayer?.stop()
+        musicPlayerFinish.onFinish = { [weak self] in
+          Task { @MainActor in
+            self?.isMusicPlaying = false
+          }
+        }
+        let player = try AVAudioPlayer(data: data)
+        player.delegate = musicPlayerFinish
+        musicLocalPlayer = player
+        player.prepareToPlay()
+        player.play()
+        isMusicPlaying = true
         Haptics.light()
       } catch {
         musicError = "Could not play audio: \(error.localizedDescription)"
+        isMusicPlaying = false
         Haptics.error()
       }
       return
@@ -2396,12 +2428,22 @@ final class AppState: ObservableObject {
     if let urlStr = lastMusicAudio,
        let url = Self.musicPlaybackURL(from: urlStr)
     {
-      speechPlayer?.stop()
-      speechPlayer = nil
+      musicLocalPlayer?.stop()
+      musicLocalPlayer = nil
       let item = AVPlayerItem(url: url)
       let player = AVPlayer(playerItem: item)
       musicStreamPlayer = player
+      musicEndObserver = NotificationCenter.default.addObserver(
+        forName: .AVPlayerItemDidPlayToEndTime,
+        object: item,
+        queue: .main
+      ) { [weak self] _ in
+        Task { @MainActor in
+          self?.isMusicPlaying = false
+        }
+      }
       player.play()
+      isMusicPlaying = true
       Haptics.light()
       return
     }
@@ -2409,6 +2451,28 @@ final class AppState: ObservableObject {
     Haptics.warning()
     #endif
   }
+
+  /// Stop in-app music playback (local or streamed). Does not affect TTS.
+  func stopMusicPlayback() {
+    #if canImport(AVFoundation) && os(iOS)
+    musicLocalPlayer?.stop()
+    musicLocalPlayer = nil
+    musicStreamPlayer?.pause()
+    musicStreamPlayer = nil
+    clearMusicEndObserver()
+    #endif
+    isMusicPlaying = false
+    Haptics.light()
+  }
+
+  #if canImport(AVFoundation) && os(iOS)
+  private func clearMusicEndObserver() {
+    if let musicEndObserver {
+      NotificationCenter.default.removeObserver(musicEndObserver)
+      self.musicEndObserver = nil
+    }
+  }
+  #endif
 
   /// Resolved https URL for the last music result (plane rehost or provider).
   var lastMusicPlaybackURL: URL? {
