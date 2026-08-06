@@ -17,6 +17,25 @@ struct SessionListView: View {
           Label("New chat", systemImage: "plus.bubble")
             .frame(minHeight: 44)
         }
+        if state.backend == .playground, state.authenticated {
+          Button {
+            Task { await state.syncPlaygroundConversations() }
+          } label: {
+            if state.serverSyncBusy {
+              Label("Syncing playground…", systemImage: "arrow.triangle.2.circlepath")
+            } else {
+              Label("Sync from playground cloud", systemImage: "icloud.and.arrow.down")
+            }
+          }
+          .disabled(state.serverSyncBusy)
+          .frame(minHeight: 44)
+          .accessibilityHint("Imports chats stored on play.skyphusion.org for this account")
+        }
+        if let msg = state.serverSyncMessage {
+          Text(msg)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+        }
       }
 
       Section {
@@ -56,7 +75,16 @@ struct SessionListView: View {
       } header: {
         Text("Chats")
       } footer: {
-        Text("Stored on this device only (not on the plane). Max \(50) chats. Swipe to delete.")
+        if state.backend == .controlPlane {
+          Text(
+            "Control plane never stores chats (privacy). Sessions stay on this device. "
+              + "Export from Settings for backup. Max \(50) chats."
+          )
+        } else {
+          Text(
+            "Local copies plus optional playground cloud sync when signed in. Max \(50) chats. Swipe to delete."
+          )
+        }
       }
     }
     .navigationTitle("Chats")

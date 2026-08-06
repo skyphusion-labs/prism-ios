@@ -50,9 +50,9 @@ CI runs package tests on Ubuntu. The iOS app is built with Xcode locally (not in
 
 ## Status
 
-- Kit **0.8.1**: Tab bar is Chat / Image / Video / **More** (Audio, Music, balance, Settings).
-  TestFlight: `scripts/archive-testflight.sh` + expanded `docs/TESTFLIGHT.md`. Prior 0.8.0:
-  TTS/STT, music doors, compact, multi-session.
+- Kit **0.8.2**: Vision photo attach on chat; playground cloud chat sync; Seedance-first video;
+  complete starter chips; chat JSON export. Prior **0.8.1**: More hub, TestFlight archive path.
+  Prior 0.8.0: TTS/STT, music, compact, multi-session.
 - App Store Connect: app `6798391677`, three consumable credit IAPs. See `docs/TESTFLIGHT.md`,
   `docs/ASC-CHECKLIST.md`.
 

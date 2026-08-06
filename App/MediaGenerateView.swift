@@ -201,9 +201,20 @@ struct MediaGenerateView: View {
               .accessibilityLabel("Restore \(item.kind.rawValue) from \(item.model)")
             }
           } header: {
-            Text("History (this session)")
+            HStack {
+              Text("History (this session)")
+              Spacer()
+              Button("Clear") {
+                state.clearMediaHistory()
+              }
+              .font(.caption)
+              .accessibilityLabel("Clear media history")
+            }
           } footer: {
-            Text("Newest first. Tap to restore as current result / prompt. Not saved across launches.")
+            Text(
+              "Newest first. Tap a row to restore model, prompt, and last result. "
+                + "Session-only (not across app relaunch)."
+            )
           }
         }
       }

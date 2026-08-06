@@ -354,14 +354,44 @@ public struct ConversationCompactClearResponse: Codable, Sendable, Equatable {
   public let error: String?
 }
 
-/// Minimal `GET /api/conversations/:id` envelope (turns optional; compact is the compact field).
+/// `GET /api/conversations/:id` envelope (turns for full transcript; compact optional).
 public struct ConversationDetailResponse: Codable, Sendable, Equatable {
   public let conversation_id: String?
   public let compact: ConversationCompactState?
+  public let turns: [ConversationTurnRow]?
   public let error: String?
 }
 
 // MARK: - Chat (playground Worker)
+
+/// Playground attachment (image / audio / document). Matches prism InputAttachment subset.
+public struct ChatAttachment: Codable, Sendable, Equatable {
+  public var type: String
+  public var data: String?
+  public var mime: String?
+  public var name: String?
+
+  public init(type: String, data: String? = nil, mime: String? = nil, name: String? = nil) {
+    self.type = type
+    self.data = data
+    self.mime = mime
+    self.name = name
+  }
+
+  /// Image from a data URL (`data:image/png;base64,...`).
+  public static func image(dataURL: String, name: String? = nil) -> ChatAttachment {
+    var mime = "image/jpeg"
+    var b64 = dataURL
+    if dataURL.hasPrefix("data:"), let comma = dataURL.firstIndex(of: ",") {
+      let header = String(dataURL[dataURL.index(dataURL.startIndex, offsetBy: 5)..<comma])
+      if let semi = header.firstIndex(of: ";") {
+        mime = String(header[..<semi])
+      }
+      b64 = String(dataURL[dataURL.index(after: comma)...])
+    }
+    return ChatAttachment(type: "image", data: b64, mime: mime, name: name)
+  }
+}
 
 public struct ChatRequestBody: Codable, Sendable, Equatable {
   public var model: String
@@ -370,6 +400,7 @@ public struct ChatRequestBody: Codable, Sendable, Equatable {
   public var conversation_id: String?
   public var use_docs: Bool?
   public var use_web_search: Bool?
+  public var attachments: [ChatAttachment]?
 
   public init(
     model: String,
@@ -377,7 +408,8 @@ public struct ChatRequestBody: Codable, Sendable, Equatable {
     systemPrompt: String? = nil,
     conversationId: String? = nil,
     useDocs: Bool? = nil,
-    useWebSearch: Bool? = nil
+    useWebSearch: Bool? = nil,
+    attachments: [ChatAttachment]? = nil
   ) {
     self.model = model
     self.user_input = userInput
@@ -385,7 +417,36 @@ public struct ChatRequestBody: Codable, Sendable, Equatable {
     self.conversation_id = conversationId
     self.use_docs = useDocs
     self.use_web_search = useWebSearch
+    self.attachments = attachments
   }
+}
+
+// MARK: - Playground conversation list (server-side sync)
+
+public struct ConversationListItem: Codable, Sendable, Equatable, Identifiable {
+  public var id: String { conversation_id }
+  public let conversation_id: String
+  public let turn_count: Int?
+  public let first_input: String?
+  public let latest_model: String?
+  public let last_created_at: String?
+  public let first_created_at: String?
+}
+
+public struct ConversationListResponse: Codable, Sendable, Equatable {
+  public let conversations: [ConversationListItem]?
+}
+
+public struct ConversationTurnRow: Codable, Sendable, Equatable {
+  public let role: String?
+  public let user_input: String?
+  public let output: String?
+  public let model: String?
+  public let turn_index: Int?
+  /// Some rows use assistant_output naming; decoded if present.
+  public let assistant_output: String?
+
+  public var resolvedOutput: String? { output ?? assistant_output }
 }
 
 public struct ChatUsage: Codable, Sendable, Equatable {
@@ -608,11 +669,52 @@ public struct StoreRedeemResponse: Codable, Sendable, Equatable {
 
 public struct ControlPlaneChatMessage: Codable, Sendable, Equatable {
   public var role: String
+  /// Plain text. When `imageDataUrls` is non-empty, encode uses OpenAI multiparty content.
   public var content: String
+  /// Vision attachments as data: or https URLs (user turns).
+  public var imageDataUrls: [String]?
 
-  public init(role: String, content: String) {
+  public init(role: String, content: String, imageDataUrls: [String]? = nil) {
     self.role = role
     self.content = content
+    self.imageDataUrls = imageDataUrls
+  }
+
+  enum CodingKeys: String, CodingKey {
+    case role, content
+  }
+
+  public init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    role = try c.decode(String.self, forKey: .role)
+    if let s = try? c.decode(String.self, forKey: .content) {
+      content = s
+      imageDataUrls = nil
+    } else {
+      content = ""
+      imageDataUrls = nil
+    }
+  }
+
+  public func encode(to encoder: Encoder) throws {
+    var c = encoder.container(keyedBy: CodingKeys.self)
+    try c.encode(role, forKey: .role)
+    if let images = imageDataUrls, !images.isEmpty {
+      var parts = c.nestedUnkeyedContainer(forKey: .content)
+      enum PartKey: String, CodingKey { case type, text, image_url }
+      enum URLKey: String, CodingKey { case url }
+      for url in images {
+        var part = parts.nestedContainer(keyedBy: PartKey.self)
+        try part.encode("image_url", forKey: .type)
+        var iu = part.nestedContainer(keyedBy: URLKey.self, forKey: .image_url)
+        try iu.encode(url, forKey: .url)
+      }
+      var textPart = parts.nestedContainer(keyedBy: PartKey.self)
+      try textPart.encode("text", forKey: .type)
+      try textPart.encode(content.isEmpty ? " " : content, forKey: .text)
+    } else {
+      try c.encode(content, forKey: .content)
+    }
   }
 }
 

@@ -43,6 +43,28 @@ StoreKit Server API key (optional, for stricter plane verification later):
 - Auth setup: `docs/apple-cli.md`  
 - Device beta: `docs/TESTFLIGHT.md`  
 
+## Product gates (pre-public)
+
+| Gate | Check |
+| --- | --- |
+| Plane redeem | `POST /v1/store/redeem` (0.4.15+); sandbox IAP → balance rises |
+| Plane vision | v0.4.23+ multiparty image_url on chat |
+| Plane Fable stream | v0.4.22+ deferred SSE first-byte |
+| TestFlight smoke | Full `docs/TESTFLIGHT.md` on device build 0.8.2+ |
+| Privacy labels | Photos + mic; no tracking; chat not sold |
+| Review notes | Operator enrollment token; control plane privacy (no server chat) |
+| Do not ship | Public top-up marketing until sandbox redeem verified on device |
+
+## Pre-submit ASC pass (operator)
+
+1. `asc apps list` / app 6798391677 still current  
+2. IAP three credit packs READY_TO_SUBMIT or approved  
+3. Screenshots updated for Chat (attach photo) + Image + Settings  
+4. Privacy policy + support URLs live  
+5. Age rating questionnaire matches AI generation  
+6. Export compliance: HTTPS only  
+7. Build uploaded via TestFlight; internal group installed once  
+
 ## Product gates
 
 - Plane redeem: `POST /v1/store/redeem` (0.4.15+)  

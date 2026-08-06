@@ -9,6 +9,7 @@ struct SettingsView: View {
   @State private var draftPlaneURL: String = ""
   @State private var pastedDeviceKey: String = ""
   @State private var confirmClearKey = false
+  @State private var chatExportURL: ExportURL?
 
   var body: some View {
     Form {
@@ -245,6 +246,32 @@ struct SettingsView: View {
     }
 
     Section {
+      Button {
+        guard let data = state.exportSessionsJSON() else { return }
+        let url = FileManager.default.temporaryDirectory
+          .appendingPathComponent("prism-chats-\(Int(Date().timeIntervalSince1970)).json")
+        try? data.write(to: url, options: .atomic)
+        chatExportURL = ExportURL(url: url)
+      } label: {
+        Label("Export local chats (JSON)", systemImage: "square.and.arrow.up")
+      }
+      .frame(minHeight: 44)
+      .sheet(item: $chatExportURL) { item in
+        #if canImport(UIKit)
+        ChatExportActivityView(items: [item.url])
+        #endif
+      }
+      Text(
+        "Control plane never stores conversation text. Export for backup. "
+          + "Playground cloud history: Chats list → Sync from playground cloud."
+      )
+      .font(.caption)
+      .foregroundStyle(.secondary)
+    } header: {
+      Text("Chat backup")
+    }
+
+    Section {
       SecureField("Or paste pcp_ device key", text: $pastedDeviceKey)
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled()
@@ -356,6 +383,22 @@ struct SettingsView: View {
     }
   }
 }
+
+private struct ExportURL: Identifiable {
+  let id = UUID()
+  let url: URL
+}
+
+#if canImport(UIKit)
+import UIKit
+private struct ChatExportActivityView: UIViewControllerRepresentable {
+  let items: [Any]
+  func makeUIViewController(context: Context) -> UIActivityViewController {
+    UIActivityViewController(activityItems: items, applicationActivities: nil)
+  }
+  func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+#endif
 
 #Preview {
   NavigationStack {
