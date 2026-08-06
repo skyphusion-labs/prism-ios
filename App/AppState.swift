@@ -2518,14 +2518,17 @@ final class AppState: ObservableObject {
     }
     musicBusy = true
     musicError = nil
-    musicStatus = "Generating \(model.model)…"
+    musicStatus =
+      "Generating \(model.model) · often 30–90s. Safe to leave the tab; keep Prism open or unlocked if you can."
     lastMusicAudio = nil
     lastMusicData = nil
     lastMusicLocalURL = nil
+    beginMusicBackgroundWork()
     startMusicTimer()
     defer {
       stopMusicTimer()
       musicBusy = false
+      endMusicBackgroundWork()
     }
     let lyrics = musicLyrics.trimmingCharacters(in: .whitespacesAndNewlines)
     do {
@@ -2539,8 +2542,10 @@ final class AppState: ObservableObject {
       lastMusicAudio = res.audio
       lastMusicData = res.audioData
       lastMusicModel = res.model ?? model.model
-      musicStatus = "Done · \(lastMusicModel ?? model.model) · \(musicElapsedSeconds)s"
+      let detail = "\(lastMusicModel ?? model.model) · \(musicElapsedSeconds)s"
+      musicStatus = "Done · \(detail)"
       Haptics.success()
+      notifyMusicFinished(success: true, detail: detail)
       // Do not auto-play (user controls Play). Optionally cache remote audio for Save.
       if lastMusicData == nil, let urlStr = lastMusicAudio {
         Task { await self.prefetchMusicIfNeeded(urlString: urlStr) }
@@ -2550,10 +2555,12 @@ final class AppState: ObservableObject {
       musicError = PrismError.cancelled.userFacingMessage
       musicStatus = "Cancelled after \(musicElapsedSeconds)s"
       Haptics.warning()
+      notifyMusicFinished(success: false, detail: "Cancelled after \(musicElapsedSeconds)s")
     } catch {
       musicError = prismUserFacingError(error)
       musicStatus = "Failed after \(musicElapsedSeconds)s"
       Haptics.error()
+      notifyMusicFinished(success: false, detail: musicError ?? "Failed")
     }
   }
 
@@ -2779,13 +2786,16 @@ final class AppState: ObservableObject {
     }
   }
 
-  /// Background task id while a long video gen is running (iOS).
+  /// Background task ids while long gens run (iOS). Extends execution a bit after
+  /// lock/app-switch so URLSession is not killed mid-request.
   #if canImport(UIKit)
   private var videoBackgroundTask: UIBackgroundTaskIdentifier = .invalid
+  private var musicBackgroundTask: UIBackgroundTaskIdentifier = .invalid
   #endif
 
   func beginVideoBackgroundWork() {
     #if canImport(UIKit)
+    endVideoBackgroundWork()
     videoBackgroundTask = UIApplication.shared.beginBackgroundTask(withName: "prism.video") { [weak self] in
       self?.endVideoBackgroundWork()
     }
@@ -2801,14 +2811,47 @@ final class AppState: ObservableObject {
     #endif
   }
 
+  func beginMusicBackgroundWork() {
+    #if canImport(UIKit)
+    endMusicBackgroundWork()
+    musicBackgroundTask = UIApplication.shared.beginBackgroundTask(withName: "prism.music") { [weak self] in
+      self?.endMusicBackgroundWork()
+    }
+    // Keep the screen awake while the user is still in Prism so lock does not
+    // suspend the request mid-generation (often 30–90s+ rehost).
+    UIApplication.shared.isIdleTimerDisabled = true
+    #endif
+  }
+
+  func endMusicBackgroundWork() {
+    #if canImport(UIKit)
+    if musicBackgroundTask != .invalid {
+      UIApplication.shared.endBackgroundTask(musicBackgroundTask)
+      musicBackgroundTask = .invalid
+    }
+    // Only clear idle timer if video is not also holding a long run.
+    if videoBackgroundTask == .invalid {
+      UIApplication.shared.isIdleTimerDisabled = false
+    }
+    #endif
+  }
+
   func notifyVideoFinished(success: Bool, detail: String) {
+    notifyLongRunFinished(kind: "Video", success: success, detail: detail)
+  }
+
+  func notifyMusicFinished(success: Bool, detail: String) {
+    notifyLongRunFinished(kind: "Music", success: success, detail: detail)
+  }
+
+  private func notifyLongRunFinished(kind: String, success: Bool, detail: String) {
     #if canImport(UIKit)
     let content = UNMutableNotificationContent()
-    content.title = success ? "Video ready" : "Video failed"
+    content.title = success ? "\(kind) ready" : "\(kind) failed"
     content.body = detail
     content.sound = .default
     let req = UNNotificationRequest(
-      identifier: "prism.video.\(UUID().uuidString)",
+      identifier: "prism.\(kind.lowercased()).\(UUID().uuidString)",
       content: content,
       trigger: nil
     )
