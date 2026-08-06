@@ -50,11 +50,10 @@ CI runs package tests on Ubuntu. The iOS app is built with Xcode locally (not in
 
 ## Status
 
-- Kit 0.3.1: playground + control-plane OpenAI SSE streams; Keychain for plane key **and** playground session cookie.
-- App: dual backend, stay signed-in across launches (session restore), plane enroll, streaming chat.
+- Kit **0.5.3**: dual backend; plane default; dual-pool balance; i2i photo picker; in-app video player;
+  share/save; cancel; model search; structured error copy; Grok video pairs with plane **0.4.14** ZDR upload.
 - App Store Connect: app `6798391677`, three consumable credit IAPs READY_TO_SUBMIT.
-- App Settings top-up: StoreKit 2 purchase UI (local via `Configuration.storekit`); plane receipt redeem deferred.
-- Control plane Image + Video tabs: `POST /v1/images/generations` + `/v1/videos/generations` (kit 0.5).
+- StoreKit 2 top-up UI (local `Configuration.storekit`); plane receipt redeem still deferred.
 - Next: plane receipt redeem when contract un-parks it.
 
 ## Related

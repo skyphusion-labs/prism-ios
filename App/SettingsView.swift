@@ -11,28 +11,31 @@ struct SettingsView: View {
 
   var body: some View {
     Form {
-      Section {
-        Picker("Backend", selection: Binding(
-          get: { state.backend },
-          set: { state.setBackend($0) }
-        )) {
-          ForEach(BackendKind.allCases) { kind in
-            Text(kind.title).tag(kind)
+      if state.showDeveloperSettings {
+        Section {
+          Picker("Backend", selection: Binding(
+            get: { state.backend },
+            set: { state.setBackend($0) }
+          )) {
+            ForEach(BackendKind.allCases) { kind in
+              Text(kind.title).tag(kind)
+            }
           }
+          .pickerStyle(.segmented)
+        } header: {
+          Text("Backend")
+        } footer: {
+          Text(
+            "Playground is play.skyphusion.org (session cookie). Control plane is play-proxy (pcp_ device key, metered)."
+          )
         }
-        .pickerStyle(.segmented)
-      } header: {
-        Text("Backend")
-      } footer: {
-        Text(
-          "Playground is play.skyphusion.org (session cookie). Control plane is play-proxy (pcp_ device key, metered)."
-        )
       }
 
       if state.backend == .playground {
         playgroundSection
       } else {
         controlPlaneSection
+        balanceSection
         topUpSection
       }
 
@@ -66,6 +69,17 @@ struct SettingsView: View {
         }
       }
 
+      Section {
+        Toggle("Developer options", isOn: Binding(
+          get: { state.showDeveloperSettings },
+          set: { state.setShowDeveloperSettings($0) }
+        ))
+      } header: {
+        Text("Advanced")
+      } footer: {
+        Text("Unlocks playground backend and base-URL overrides. Product default is Control plane.")
+      }
+
       if let err = state.errorMessage {
         Section {
           Text(err).foregroundStyle(.red).font(.footnote)
@@ -81,6 +95,29 @@ struct SettingsView: View {
       if state.backend == .controlPlane {
         await store.loadProducts()
       }
+    }
+  }
+
+  @ViewBuilder
+  private var balanceSection: some View {
+    Section {
+      if state.planeUsageLines.isEmpty {
+        Text(state.planeBalance ?? "Refresh models to load balance.")
+          .font(.footnote)
+          .foregroundStyle(.secondary)
+      } else {
+        ForEach(state.planeUsageLines, id: \.self) { line in
+          Text(line)
+            .font(.footnote)
+        }
+      }
+      Button("Refresh balance") {
+        Task { await state.refreshModels() }
+      }
+    } header: {
+      Text("Balance")
+    } footer: {
+      Text("Spendable is prepaid + monthly allowance. Top-ups apply after plane receipt redeem is live.")
     }
   }
 
@@ -114,25 +151,27 @@ struct SettingsView: View {
 
   @ViewBuilder
   private var controlPlaneSection: some View {
-    Section {
-      TextField("Base URL", text: $draftPlaneURL)
-        .textInputAutocapitalization(.never)
-        .autocorrectionDisabled()
-        .keyboardType(.URL)
-        .textContentType(.URL)
-      Button("Apply URL") {
-        state.controlPlaneURLString = draftPlaneURL
-        state.rebuildClients(clearSession: false)
-        Task { await state.refreshModels() }
+    if state.showDeveloperSettings {
+      Section {
+        TextField("Base URL", text: $draftPlaneURL)
+          .textInputAutocapitalization(.never)
+          .autocorrectionDisabled()
+          .keyboardType(.URL)
+          .textContentType(.URL)
+        Button("Apply URL") {
+          state.controlPlaneURLString = draftPlaneURL
+          state.rebuildClients(clearSession: false)
+          Task { await state.refreshModels() }
+        }
+        Button("Use play-proxy.skyphusion.org") {
+          draftPlaneURL = ControlPlaneClient.productionBaseURL.absoluteString
+          state.controlPlaneURLString = draftPlaneURL
+          state.rebuildClients(clearSession: false)
+          Task { await state.refreshModels() }
+        }
+      } header: {
+        Text("Control plane server")
       }
-      Button("Use play-proxy.skyphusion.org") {
-        draftPlaneURL = ControlPlaneClient.productionBaseURL.absoluteString
-        state.controlPlaneURLString = draftPlaneURL
-        state.rebuildClients(clearSession: false)
-        Task { await state.refreshModels() }
-      }
-    } header: {
-      Text("Control plane server")
     }
 
     Section {

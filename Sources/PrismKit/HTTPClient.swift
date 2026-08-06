@@ -141,9 +141,7 @@ public final class HTTPClient: @unchecked Sendable {
     )
     let (data, http) = try await send(req)
     if !okStatuses.contains(http.statusCode) {
-      let message = Self.extractErrorMessage(data)
-      if http.statusCode == 401 { throw PrismError.unauthenticated }
-      throw PrismError.httpStatus(http.statusCode, message: message)
+      throw Self.prismError(from: data, status: http.statusCode)
     }
     do {
       return try JSONDecoder().decode(T.self, from: data)
@@ -163,11 +161,30 @@ public final class HTTPClient: @unchecked Sendable {
     let req = try request(method: method, path: path, body: body, headers: headers, bearer: bearer)
     let (data, http) = try await send(req)
     if !okStatuses.contains(http.statusCode) {
-      let message = Self.extractErrorMessage(data)
-      if http.statusCode == 401 { throw PrismError.unauthenticated }
-      throw PrismError.httpStatus(http.statusCode, message: message)
+      throw Self.prismError(from: data, status: http.statusCode)
     }
     return (data, http)
+  }
+
+  /// Prefer structured plane `{ error: { code, message } }` when present.
+  public static func prismError(from data: Data, status: Int) -> PrismError {
+    if status == 401 { return .unauthenticated }
+    struct ErrObj: Decodable {
+      let error: FlexibleError?
+      let message: String?
+      struct FlexibleError: Decodable {
+        let message: String?
+        let code: String?
+      }
+    }
+    if let e = try? JSONDecoder().decode(ErrObj.self, from: data),
+       let code = e.error?.code, !code.isEmpty
+    {
+      let msg = e.error?.message ?? e.message ?? code
+      return .api(code: code, message: msg, httpStatus: status)
+    }
+    let message = extractErrorMessage(data)
+    return .httpStatus(status, message: message)
   }
 
   public static func extractErrorMessage(_ data: Data) -> String? {
@@ -177,13 +194,11 @@ public final class HTTPClient: @unchecked Sendable {
       struct FlexibleError: Decodable {
         let message: String?
         let code: String?
-        // Plane may send error as a bare string in some paths; handle via string fallback below.
       }
     }
     if let e = try? JSONDecoder().decode(ErrObj.self, from: data) {
       if let m = e.error?.message ?? e.error?.code ?? e.message { return m }
     }
-    // Bare string error field
     struct ErrStr: Decodable { let error: String?; let message: String? }
     if let e = try? JSONDecoder().decode(ErrStr.self, from: data) {
       return e.error ?? e.message

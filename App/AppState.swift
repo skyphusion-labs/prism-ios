@@ -43,7 +43,10 @@ enum BackendKind: String, CaseIterable, Identifiable {
 final class AppState: ObservableObject {
   // MARK: - Backend
 
-  @Published var backend: BackendKind = .playground
+  /// Product default is control plane; playground lives under Settings → Developer.
+  @Published var backend: BackendKind = .controlPlane
+  /// When false (default), Settings hides playground/URL tinkering.
+  @Published var showDeveloperSettings: Bool = false
 
   /// Playground base URL (public or self-host).
   @Published var baseURLString: String = PrismClient.playBaseURL.absoluteString
@@ -63,6 +66,11 @@ final class AppState: ObservableObject {
   @Published var deviceKeyPresent: Bool = false
   @Published var planeClientLabel: String?
   @Published var planeBalance: String?
+  /// Dual-pool detail lines for Settings.
+  @Published var planeUsageLines: [String] = []
+  @Published var modelSearch: String = ""
+  /// Hide unspendable models in pickers (default on for plane).
+  @Published var hideUnspendable: Bool = true
 
   // MARK: - Catalog
 
@@ -105,6 +113,8 @@ final class AppState: ObservableObject {
   private let secrets: any SecretStore
   private var playground: PrismClient
   private var controlPlane: ControlPlaneClient
+  private var chatTask: Task<Void, Never>?
+  private var mediaTask: Task<Void, Never>?
 
   init(secrets: (any SecretStore)? = nil) {
     let store = secrets ?? SecretStores.default()
@@ -115,15 +125,32 @@ final class AppState: ObservableObject {
     rebuildClients(clearSession: false)
   }
 
+  private func appliesSpendableFilter(_ m: ModelEntry) -> Bool {
+    if backend != .controlPlane || !hideUnspendable { return true }
+    return m.isSpendable
+  }
+
+  private func matchesSearch(_ m: ModelEntry) -> Bool {
+    let q = modelSearch.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    guard !q.isEmpty else { return true }
+    let hay = "\(m.label ?? "") \(m.model) \(m.provider ?? "") \(m.group ?? "")".lowercased()
+    return hay.contains(q)
+  }
+
   var chatModels: [ModelEntry] {
-    models.filter { ($0.type ?? "chat") == "chat" }
+    models
+      .filter { ($0.type ?? "chat") == "chat" }
+      .filter(appliesSpendableFilter)
+      .filter(matchesSearch)
+      .sorted { ($0.label ?? $0.model) < ($1.label ?? $1.model) }
   }
 
   var imageModels: [ModelEntry] {
     // Pure t2i first (prompt-only), then dual i2i (+ref), then i2i-required.
-    // Many catalog image models are dual-mode (Flux 2, nano-banana, gpt-image, Grok image).
     models
       .filter { ($0.type ?? "") == "image" }
+      .filter(appliesSpendableFilter)
+      .filter(matchesSearch)
       .sorted { a, b in
         let ar = imageRefRank(a)
         let br = imageRefRank(b)
@@ -141,9 +168,11 @@ final class AppState: ObservableObject {
   }
 
   var videoModels: [ModelEntry] {
-    // Grok video currently CF-7003s on this plane; keep it listed but last.
+    // Prefer working models first; Grok video last (ZDR path needs plane 0.4.14+).
     models
       .filter { ($0.type ?? "") == "video" }
+      .filter(appliesSpendableFilter)
+      .filter(matchesSearch)
       .sorted { a, b in
         let ag = a.model.hasPrefix("xai/grok-imagine-video")
         let bg = b.model.hasPrefix("xai/grok-imagine-video")
@@ -208,6 +237,9 @@ final class AppState: ObservableObject {
     if let raw = try? secrets.get(SecretStoreKeys.backendMode),
        let kind = BackendKind(rawValue: raw) {
       backend = kind
+    } else {
+      // First launch: commercial plane, not playground lab mode.
+      backend = .controlPlane
     }
     if let u = try? secrets.get(SecretStoreKeys.playgroundBaseURL), !u.isEmpty {
       baseURLString = u
@@ -221,12 +253,21 @@ final class AppState: ObservableObject {
     } else {
       deviceKeyPresent = false
     }
+    if let dev = try? secrets.get("prism.showDeveloperSettings") {
+      showDeveloperSettings = (dev == "1" || dev == "true")
+    }
   }
 
   func persistSettings() {
     try? secrets.set(backend.rawValue, for: SecretStoreKeys.backendMode)
     try? secrets.set(baseURLString, for: SecretStoreKeys.playgroundBaseURL)
     try? secrets.set(controlPlaneURLString, for: SecretStoreKeys.controlPlaneBaseURL)
+    try? secrets.set(showDeveloperSettings ? "1" : "0", for: "prism.showDeveloperSettings")
+  }
+
+  func setShowDeveloperSettings(_ on: Bool) {
+    showDeveloperSettings = on
+    persistSettings()
   }
 
   func rebuildClients(clearSession: Bool = true) {
@@ -314,7 +355,7 @@ final class AppState: ObservableObject {
       pickDefaultModel()
       banner = statusBannerPlayground(from: res)
     } catch {
-      errorMessage = error.localizedDescription
+      errorMessage = prismUserFacingError(error)
     }
   }
 
@@ -322,6 +363,7 @@ final class AppState: ObservableObject {
     authMode = "control-plane"
     guard deviceKeyPresent else {
       models = []
+      planeUsageLines = []
       banner = "Control plane · no device key · enroll in Settings"
       return
     }
@@ -330,17 +372,22 @@ final class AppState: ObservableObject {
       models = list.data.map { $0.asModelEntry() }
       pickDefaultModel()
       if let me = try? await controlPlane.me() {
-        planeClientLabel = me.client?.label ?? me.client?.id
-        planeBalance = me.usage?.balanceDescription
-        banner = statusBannerPlane(modelCount: models.count, me: me)
+        applyPlaneMe(me)
       } else {
         banner = "Control plane · \(models.count) models"
       }
       authenticated = true
     } catch {
-      errorMessage = error.localizedDescription
+      errorMessage = prismUserFacingError(error)
       banner = "Control plane · error loading models"
     }
+  }
+
+  private func applyPlaneMe(_ me: MeResponse) {
+    planeClientLabel = me.client?.label ?? me.client?.id
+    planeBalance = me.usage?.balanceDescription
+    planeUsageLines = me.usage?.dualPoolLines ?? []
+    banner = statusBannerPlane(modelCount: models.count, me: me)
   }
 
   private func pickDefaultModel() {
@@ -399,7 +446,7 @@ final class AppState: ObservableObject {
       persistPlaygroundSession(username: sessionUsername)
       await refreshModels()
     } catch {
-      errorMessage = error.localizedDescription
+      errorMessage = prismUserFacingError(error)
       authenticated = false
     }
   }
@@ -416,7 +463,7 @@ final class AppState: ObservableObject {
       persistPlaygroundSession(username: sessionUsername)
       await refreshModels()
     } catch {
-      errorMessage = error.localizedDescription
+      errorMessage = prismUserFacingError(error)
       authenticated = false
     }
   }
@@ -429,7 +476,7 @@ final class AppState: ObservableObject {
       do {
         try await playground.logout()
       } catch {
-        errorMessage = error.localizedDescription
+        errorMessage = prismUserFacingError(error)
       }
       clearPersistedPlaygroundSession()
     }
@@ -469,7 +516,7 @@ final class AppState: ObservableObject {
       planeClientLabel = res.client_id
       await refreshModels()
     } catch {
-      errorMessage = error.localizedDescription
+      errorMessage = prismUserFacingError(error)
       deviceKeyPresent = false
     }
   }
@@ -488,7 +535,7 @@ final class AppState: ObservableObject {
       errorMessage = nil
       await refreshModels()
     } catch {
-      errorMessage = error.localizedDescription
+      errorMessage = prismUserFacingError(error)
     }
   }
 
@@ -498,6 +545,7 @@ final class AppState: ObservableObject {
     deviceKeyPresent = false
     models = []
     planeBalance = nil
+    planeUsageLines = []
     planeClientLabel = nil
     turns = []
     conversationId = nil
@@ -506,7 +554,22 @@ final class AppState: ObservableObject {
 
   // MARK: - Chat
 
-  func send() async {
+  func send() {
+    chatTask?.cancel()
+    chatTask = Task { await self.performSend() }
+  }
+
+  func cancelChat() {
+    chatTask?.cancel()
+    chatTask = nil
+    isBusy = false
+    if let last = turns.last, last.role == .assistant, last.text.isEmpty {
+      updateAssistant(id: last.id, text: "(cancelled)")
+    }
+    errorMessage = PrismError.cancelled.userFacingMessage
+  }
+
+  private func performSend() async {
     let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !text.isEmpty else { return }
     guard let model = selectedModel else {
@@ -531,15 +594,20 @@ final class AppState: ObservableObject {
     defer { isBusy = false }
 
     do {
+      try Task.checkCancellation()
       switch backend {
       case .playground:
         try await sendPlayground(model: model, userText: text, assistantId: assistantId)
       case .controlPlane:
         try await sendPlane(model: model, assistantId: assistantId)
       }
+    } catch is CancellationError {
+      updateAssistant(id: assistantId, text: "(cancelled)")
+      errorMessage = PrismError.cancelled.userFacingMessage
     } catch {
-      updateAssistant(id: assistantId, text: "(error) \(error.localizedDescription)")
-      errorMessage = error.localizedDescription
+      let msg = prismUserFacingError(error)
+      updateAssistant(id: assistantId, text: "(error) \(msg)")
+      errorMessage = msg
     }
   }
 
@@ -552,6 +620,7 @@ final class AppState: ObservableObject {
     if useStream, model.streaming == true {
       var assembled = ""
       for try await event in playground.chatStreamEvents(body) {
+        try Task.checkCancellation()
         switch event {
         case .delta(let t):
           assembled += t
@@ -571,13 +640,13 @@ final class AppState: ObservableObject {
       }
     } else {
       let res = try await playground.chat(body)
+      try Task.checkCancellation()
       updateAssistant(id: assistantId, text: res.output ?? "")
       if let cid = res.conversation_id { conversationId = cid }
     }
   }
 
   private func sendPlane(model: ModelEntry, assistantId: UUID) async throws {
-    // Build OpenAI-style messages from transcript (exclude empty assistant bubble).
     var messages: [ControlPlaneChatMessage] = []
     for turn in turns where turn.id != assistantId {
       switch turn.role {
@@ -596,6 +665,7 @@ final class AppState: ObservableObject {
       var assembled = ""
       let body = ControlPlaneChatRequest(model: model.model, messages: messages, stream: true)
       for try await event in controlPlane.chatCompletionsStream(body) {
+        try Task.checkCancellation()
         switch event {
         case .delta(let t):
           assembled += t
@@ -617,14 +687,11 @@ final class AppState: ObservableObject {
       }
     } else {
       let text = try await controlPlane.chat(model: model.model, messages: messages)
+      try Task.checkCancellation()
       updateAssistant(id: assistantId, text: text)
     }
 
-    // Refresh balance after a spend (best-effort; stream omits money headers).
-    if let me = try? await controlPlane.me() {
-      planeBalance = me.usage?.balanceDescription
-      banner = statusBannerPlane(modelCount: models.count, me: me)
-    }
+    await refreshPlaneBalanceOnly()
   }
 
   private func updateAssistant(id: UUID, text: String) {
@@ -632,14 +699,60 @@ final class AppState: ObservableObject {
     turns[i].text = text
   }
 
-  func clearChat() {
+  /// New conversation: clear turns and conversation id.
+  func newChat() {
+    cancelChat()
     turns = []
     conversationId = nil
+    errorMessage = nil
   }
+
+  func clearChat() { newChat() }
 
   // MARK: - Image / video generation (control plane)
 
-  func generateImage() async {
+  func generateImage() {
+    mediaTask?.cancel()
+    mediaTask = Task { await self.performGenerateImage() }
+  }
+
+  func generateVideo() {
+    mediaTask?.cancel()
+    mediaTask = Task { await self.performGenerateVideo() }
+  }
+
+  func cancelMedia() {
+    mediaTask?.cancel()
+    mediaTask = nil
+    mediaBusy = false
+    mediaStatus = nil
+    mediaError = PrismError.cancelled.userFacingMessage
+  }
+
+  /// Attach a reference still as a data: URL (Photos picker / camera roll).
+  func setImageReferenceData(_ data: Data, mime: String = "image/jpeg") {
+    let b64 = data.base64EncodedString()
+    imageImageRef = "data:\(mime);base64,\(b64)"
+  }
+
+  func setVideoReferenceData(_ data: Data, mime: String = "image/jpeg") {
+    let b64 = data.base64EncodedString()
+    videoImageRef = "data:\(mime);base64,\(b64)"
+  }
+
+  /// Use last generated image as the next i2i/i2v reference.
+  func useLastImageAsReference(forVideo: Bool = false) {
+    if let b64 = lastImageBase64, !b64.isEmpty {
+      let raw = b64.hasPrefix("data:") ? b64 : "data:image/png;base64,\(b64)"
+      if forVideo { videoImageRef = raw } else { imageImageRef = raw }
+      return
+    }
+    if let url = lastImageURL, !url.isEmpty {
+      if forVideo { videoImageRef = url } else { imageImageRef = url }
+    }
+  }
+
+  private func performGenerateImage() async {
     guard canUseMediaDoors else {
       mediaError = "Control plane + device key required for image generation."
       return
@@ -662,15 +775,17 @@ final class AppState: ObservableObject {
     let imageRef = imageImageRef.trimmingCharacters(in: .whitespacesAndNewlines)
     let caps = model.capabilities ?? []
     if caps.contains("image-input-required"), imageRef.isEmpty {
-      mediaError = "This model requires a reference image (i2i). Paste an https or data: URL."
+      mediaError = "This model requires a reference image (i2i). Add a photo or paste a URL."
       return
     }
     do {
+      try Task.checkCancellation()
       let res = try await controlPlane.generateImage(
         model: model.model,
         prompt: prompt,
         image: imageRef.isEmpty ? nil : imageRef
       )
+      try Task.checkCancellation()
       lastImageBase64 = res.firstBase64
       lastImageURL = res.firstDisplayURL
       lastImageModel = res.model ?? model.model
@@ -681,13 +796,16 @@ final class AppState: ObservableObject {
       }
       mediaStatus = "Done · \(lastImageModel ?? model.model)"
       await refreshPlaneBalanceOnly()
+    } catch is CancellationError {
+      mediaError = PrismError.cancelled.userFacingMessage
+      mediaStatus = nil
     } catch {
-      mediaError = error.localizedDescription
+      mediaError = prismUserFacingError(error)
       mediaStatus = nil
     }
   }
 
-  func generateVideo() async {
+  private func performGenerateVideo() async {
     guard canUseMediaDoors else {
       mediaError = "Control plane + device key required for video generation."
       return
@@ -695,11 +813,15 @@ final class AppState: ObservableObject {
     let prompt = videoPrompt.trimmingCharacters(in: .whitespacesAndNewlines)
     let imageRef = videoImageRef.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !prompt.isEmpty || !imageRef.isEmpty else {
-      mediaError = "Enter a video prompt and/or an image URL / data URL for i2v."
+      mediaError = "Enter a video prompt and/or a reference image for i2v."
       return
     }
     guard let model = selectedVideoModel else {
       mediaError = "Pick a video model."
+      return
+    }
+    if model.model.hasPrefix("minimax/hailuo"), imageRef.isEmpty {
+      mediaError = "Hailuo is image-to-video only. Add a reference photo, or pick Veo / Seedance Fast."
       return
     }
     mediaBusy = true
@@ -708,17 +830,22 @@ final class AppState: ObservableObject {
     lastVideoURL = nil
     defer { mediaBusy = false }
     do {
+      try Task.checkCancellation()
       let res = try await controlPlane.generateVideo(
         model: model.model,
         prompt: prompt.isEmpty ? " " : prompt,
         image: imageRef.isEmpty ? nil : imageRef
       )
+      try Task.checkCancellation()
       lastVideoURL = res.video
       lastVideoModel = res.model ?? model.model
       mediaStatus = "Done · \(lastVideoModel ?? model.model)"
       await refreshPlaneBalanceOnly()
+    } catch is CancellationError {
+      mediaError = PrismError.cancelled.userFacingMessage
+      mediaStatus = nil
     } catch {
-      mediaError = error.localizedDescription
+      mediaError = prismUserFacingError(error)
       mediaStatus = nil
     }
   }
@@ -726,8 +853,7 @@ final class AppState: ObservableObject {
   private func refreshPlaneBalanceOnly() async {
     guard deviceKeyPresent else { return }
     if let me = try? await controlPlane.me() {
-      planeBalance = me.usage?.balanceDescription
-      banner = statusBannerPlane(modelCount: models.count, me: me)
+      applyPlaneMe(me)
     }
   }
 }

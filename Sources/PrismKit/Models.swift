@@ -13,20 +13,151 @@ public enum PrismError: Error, Equatable, Sendable {
   case transport(String)
   case unauthenticated
   case serverError(String)
+  /// Plane (or other) structured failure with machine code + human message.
+  case api(code: String, message: String, httpStatus: Int?)
+  case cancelled
 }
 
 extension PrismError: LocalizedError {
   public var errorDescription: String? {
+    userFacingMessage
+  }
+
+  /// Action-oriented copy for UI (quota → top-up, i2v missing image, etc.).
+  public var userFacingMessage: String {
     switch self {
-    case .invalidURL(let s): return "Invalid URL: \(s)"
+    case .invalidURL(let s):
+      return "Invalid URL: \(s)"
     case .httpStatus(let code, let message):
-      return message.map { "HTTP \(code): \($0)" } ?? "HTTP \(code)"
-    case .decoding(let s): return "Decode failed: \(s)"
-    case .transport(let s): return s
-    case .unauthenticated: return "Not authenticated"
-    case .serverError(let s): return s
+      return Self.mapHttp(code: code, message: message)
+    case .decoding(let s):
+      return "Could not read server response (\(s))."
+    case .transport(let s):
+      if s.localizedCaseInsensitiveContains("cancel") { return "Cancelled." }
+      return s
+    case .unauthenticated:
+      return "Not signed in. Enroll a device key (control plane) or sign in (playground)."
+    case .serverError(let s):
+      return Self.mapMessage(s)
+    case .api(let code, let message, let http):
+      return Self.mapApi(code: code, message: message, httpStatus: http)
+    case .cancelled:
+      return "Cancelled."
     }
   }
+
+  private static func mapHttp(code: Int, message: String?) -> String {
+    if let message {
+      let mapped = mapMessage(message)
+      if mapped != message { return mapped }
+      if let api = parsePlaneError(message) {
+        return mapApi(code: api.code, message: api.message, httpStatus: code)
+      }
+    }
+    switch code {
+    case 402: return "Out of credit. Open Settings → Top up, or wait for monthly allowance reset."
+    case 401: return "Session or device key rejected. Re-enroll or sign in again."
+    case 403: return message.map { mapMessage($0) } ?? "Not allowed for this account or model."
+    case 404: return message.map { mapMessage($0) } ?? "Not found."
+    case 408, 504: return "Upstream timed out. Retry, or pick a faster model (e.g. Seedance Fast / Veo Fast)."
+    case 429: return "Rate limited. Wait a moment and try again."
+    case 502, 503: return message.map { mapMessage($0) } ?? "Service unavailable. Retry shortly."
+    default:
+      return message.map { "HTTP \(code): \(mapMessage($0))" } ?? "HTTP \(code)"
+    }
+  }
+
+  private static func mapApi(code: String, message: String, httpStatus: Int?) -> String {
+    switch code {
+    case "quota_exhausted":
+      return "Out of credit. Open Settings → Top up (prepaid) or wait for monthly allowance reset."
+    case "rate_limited":
+      return "Rate limited. Wait a moment and try again."
+    case "model_not_entitled", "model_not_found":
+      return "That model is not available on this plan. Pick another from the catalog."
+    case "model_unpriced":
+      return "That model has no price yet (unspendable). Pick a spendable model."
+    case "unauthenticated", "client_revoked":
+      return "Device key missing or revoked. Clear it in Settings and re-enroll."
+    case "invalid_request":
+      if message.localizedCaseInsensitiveContains("image")
+        || message.localizedCaseInsensitiveContains("i2v")
+        || message.localizedCaseInsensitiveContains("first_frame")
+      {
+        return "This model needs a reference image. Add a photo or https/data URL, or pick a text-only model (Veo / Seedance)."
+      }
+      return message
+    case "upstream_timeout":
+      return "Generation timed out. Retry, or use Seedance Fast / Veo Fast."
+    case "upstream_error":
+      if message.contains("7003") || message.localizedCaseInsensitiveContains("user input") {
+        return "Provider rejected the request (7003). Prefer Veo or Seedance Fast for video; check the model footer."
+      }
+      if message.localizedCaseInsensitiveContains("upload_url")
+        || message.localizedCaseInsensitiveContains("zero data retention")
+      {
+        return "Grok video needs plane 0.4.14+ (ZDR upload path). Update play-proxy, or use Veo / Seedance Fast."
+      }
+      return message
+    case "unavailable":
+      return message
+    default:
+      if let httpStatus, (402...402).contains(httpStatus) {
+        return mapHttp(code: httpStatus, message: message)
+      }
+      return message.isEmpty ? code : message
+    }
+  }
+
+  private static func mapMessage(_ message: String) -> String {
+    let lower = message.lowercased()
+    if lower.contains("quota") || lower.contains("402") || lower.contains("credit") && lower.contains("exhaust") {
+      return "Out of credit. Open Settings → Top up, or wait for monthly allowance reset."
+    }
+    if lower.contains("7003") {
+      return "Provider rejected the request (7003). Prefer Veo or Seedance Fast for video."
+    }
+    if lower.contains("requires an image") || lower.contains("i2v") && lower.contains("image") {
+      return "This model needs a reference image. Add a photo or URL, or pick Veo / Seedance for text-only video."
+    }
+    if lower.contains("upload_url") || lower.contains("zero data retention") {
+      return "Grok video needs plane 0.4.14+ (ZDR upload path). Prefer Veo / Seedance Fast until then."
+    }
+    if lower.contains("cancel") {
+      return "Cancelled."
+    }
+    return message
+  }
+
+  private static func parsePlaneError(_ raw: String) -> (code: String, message: String)? {
+    // Tolerate "code: message" or JSON fragments embedded in HTTP messages.
+    if let data = raw.data(using: .utf8),
+       let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+    {
+      if let err = obj["error"] as? [String: Any],
+         let code = err["code"] as? String
+      {
+        let msg = (err["message"] as? String) ?? raw
+        return (code, msg)
+      }
+      if let code = obj["code"] as? String {
+        return (code, (obj["message"] as? String) ?? raw)
+      }
+    }
+    return nil
+  }
+}
+
+/// Map any thrown error to UI copy (PrismError or NSError cancellation).
+public func prismUserFacingError(_ error: Error) -> String {
+  if let p = error as? PrismError { return p.userFacingMessage }
+  if error is CancellationError { return PrismError.cancelled.userFacingMessage }
+  let ns = error as NSError
+  if ns.domain == NSURLErrorDomain, ns.code == NSURLErrorCancelled {
+    return PrismError.cancelled.userFacingMessage
+  }
+  // Re-enter via a lightweight PrismError so mapping stays in one place.
+  return PrismError.serverError(error.localizedDescription).userFacingMessage
 }
 
 // MARK: - Playground models catalog
@@ -45,6 +176,8 @@ public struct ModelEntry: Codable, Sendable, Equatable, Identifiable {
   public let streaming: Bool?
   public let group: String?
   public let capabilities: [String]?
+  /// Optional human price snippet for pickers (e.g. "$0.04/image").
+  public let priceLabel: String?
 
   public init(
     model: String,
@@ -53,7 +186,8 @@ public struct ModelEntry: Codable, Sendable, Equatable, Identifiable {
     provider: String? = nil,
     streaming: Bool? = nil,
     group: String? = nil,
-    capabilities: [String]? = nil
+    capabilities: [String]? = nil,
+    priceLabel: String? = nil
   ) {
     self.model = model
     self.label = label
@@ -62,10 +196,11 @@ public struct ModelEntry: Codable, Sendable, Equatable, Identifiable {
     self.streaming = streaming
     self.group = group
     self.capabilities = capabilities
+    self.priceLabel = priceLabel
   }
 
   private enum CodingKeys: String, CodingKey {
-    case model, id, label, type, provider, streaming, group, capabilities
+    case model, id, label, type, provider, streaming, group, capabilities, priceLabel
   }
 
   public init(from decoder: Decoder) throws {
@@ -86,6 +221,7 @@ public struct ModelEntry: Codable, Sendable, Equatable, Identifiable {
     streaming = try c.decodeIfPresent(Bool.self, forKey: .streaming)
     group = try c.decodeIfPresent(String.self, forKey: .group)
     capabilities = try c.decodeIfPresent([String].self, forKey: .capabilities)
+    priceLabel = try c.decodeIfPresent(String.self, forKey: .priceLabel)
   }
 
   public func encode(to encoder: Encoder) throws {
@@ -97,6 +233,11 @@ public struct ModelEntry: Codable, Sendable, Equatable, Identifiable {
     try c.encodeIfPresent(streaming, forKey: .streaming)
     try c.encodeIfPresent(group, forKey: .group)
     try c.encodeIfPresent(capabilities, forKey: .capabilities)
+    try c.encodeIfPresent(priceLabel, forKey: .priceLabel)
+  }
+
+  public var isSpendable: Bool {
+    !(capabilities ?? []).contains("unspendable")
   }
 }
 
@@ -225,6 +366,8 @@ public struct ControlPlaneModel: Codable, Sendable, Equatable, Identifiable {
   public let spendable: Bool?
   /// Picker hints: `text-to-image`, `image-input`, `image-input-required`, `text-to-video`, …
   public let capabilities: [String]?
+  public let price: ControlPlaneTokenPrice?
+  public let unit_price: ControlPlaneUnitPrice?
 
   /// Map into the playground-shaped picker entry used by the app shell.
   public func asModelEntry() -> ModelEntry {
@@ -239,9 +382,47 @@ public struct ControlPlaneModel: Codable, Sendable, Equatable, Identifiable {
       provider: billing,
       streaming: streaming,
       group: tier,
-      capabilities: caps.isEmpty ? nil : caps
+      capabilities: caps.isEmpty ? nil : caps,
+      priceLabel: Self.priceSnippet(token: price, unit: unit_price, modality: modality)
     )
   }
+
+  private static func priceSnippet(
+    token: ControlPlaneTokenPrice?,
+    unit: ControlPlaneUnitPrice?,
+    modality: String?
+  ) -> String? {
+    if let u = unit?.micro_usd_per_unit {
+      let usd = Double(u) / 1_000_000.0
+      let unitName = unit?.unit ?? "unit"
+      if usd == 0 { return "included" }
+      if usd >= 0.01 {
+        return String(format: "$%.2f/%@", usd, unitName)
+      }
+      return String(format: "$%.4f/%@", usd, unitName)
+    }
+    if let inp = token?.input_micro_usd_per_mtok, let out = token?.output_micro_usd_per_mtok {
+      let i = Double(inp) / 1_000_000.0
+      let o = Double(out) / 1_000_000.0
+      return String(format: "$%.2f/$%.2f /MTok", i, o)
+    }
+    _ = modality
+    return nil
+  }
+}
+
+public struct ControlPlaneTokenPrice: Codable, Sendable, Equatable {
+  public let input_micro_usd_per_mtok: Int?
+  public let output_micro_usd_per_mtok: Int?
+  public let priced_at: String?
+  public let source: String?
+}
+
+public struct ControlPlaneUnitPrice: Codable, Sendable, Equatable {
+  public let micro_usd_per_unit: Int?
+  public let unit: String?
+  public let priced_at: String?
+  public let source: String?
 }
 
 // MARK: Control plane account (`GET /v1/me`, `GET /v1/usage`)
@@ -280,15 +461,41 @@ public struct UsageSummary: Codable, Sendable, Equatable {
   public let period_micro_usd: Int?
   public let period_requests: Int?
 
-  /// Human-readable balance line for Settings (micro-USD -> USD).
+  /// Single-line balance for banners.
   public var balanceDescription: String {
     let spendable = spendable_remaining_micro_usd ?? remaining_micro_usd
     if let s = spendable {
       let usd = Double(s) / 1_000_000.0
       let period = period.map { " · \($0)" } ?? ""
-      return String(format: "$%.4f remaining%@", usd, period)
+      let o = overage == true ? " · overage" : ""
+      return String(format: "$%.4f spendable%@%@", usd, period, o)
     }
     return "usage unknown"
+  }
+
+  /// Multi-line dual-pool detail for Settings.
+  public var dualPoolLines: [String] {
+    var lines: [String] = []
+    if let s = spendable_remaining_micro_usd ?? remaining_micro_usd {
+      lines.append(String(format: "Spendable: $%.4f", Double(s) / 1_000_000.0))
+    }
+    if let c = remaining_micro_usd ?? credit_micro_usd {
+      // Prefer prepaid remaining when both pools exist.
+      if let prepaid = remaining_micro_usd {
+        lines.append(String(format: "Prepaid remaining: $%.4f", Double(prepaid) / 1_000_000.0))
+      } else {
+        lines.append(String(format: "Prepaid credit: $%.4f", Double(c) / 1_000_000.0))
+      }
+    }
+    if let a = allowance_remaining_micro_usd {
+      lines.append(String(format: "Monthly remaining: $%.4f", Double(a) / 1_000_000.0))
+    } else if let incl = monthly_included_micro_usd, let spent = allowance_spent_micro_usd {
+      let rem = max(0, incl - spent)
+      lines.append(String(format: "Monthly remaining: $%.4f", Double(rem) / 1_000_000.0))
+    }
+    if let p = period { lines.append("Period: \(p)") }
+    if overage == true { lines.append("Overage: yes") }
+    return lines
   }
 }
 

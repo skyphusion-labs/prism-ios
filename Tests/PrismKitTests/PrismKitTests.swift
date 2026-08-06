@@ -9,7 +9,7 @@ import FoundationNetworking
 final class PrismKitTests: XCTestCase {
   func testHealthString() {
     XCTAssertEqual(PrismKit.health(), "ok:PrismKit")
-    XCTAssertEqual(PrismKit.version, "0.5.2")
+    XCTAssertEqual(PrismKit.version, "0.5.3")
   }
 
   func testSessionCookieExportRestore() throws {
@@ -511,4 +511,39 @@ final class ControlPlaneClientTests: XCTestCase {
     }.joined()
     XCTAssertEqual(joined, "hi")
   }
+
+  func testErrorMappingQuota() {
+    let e = PrismError.api(code: "quota_exhausted", message: "spent", httpStatus: 402)
+    XCTAssertTrue(e.userFacingMessage.lowercased().contains("credit") || e.userFacingMessage.lowercased().contains("top"))
+  }
+
+  func testErrorMappingCancelled() {
+    XCTAssertEqual(prismUserFacingError(CancellationError()), "Cancelled.")
+  }
+
+  func testModelEntrySpendable() {
+    let m = ModelEntry(model: "x", capabilities: ["unspendable"])
+    XCTAssertFalse(m.isSpendable)
+    let m2 = ModelEntry(model: "y", capabilities: ["text-to-image"])
+    XCTAssertTrue(m2.isSpendable)
+  }
+
+  func testUsageDualPoolLines() {
+    let u = UsageSummary(
+      credit_micro_usd: 1_000_000,
+      spent_micro_usd: 0,
+      remaining_micro_usd: 800_000,
+      monthly_included_micro_usd: 500_000,
+      allowance_spent_micro_usd: 100_000,
+      allowance_remaining_micro_usd: 400_000,
+      spendable_remaining_micro_usd: 1_200_000,
+      overage: false,
+      period: "2026-08",
+      period_micro_usd: nil,
+      period_requests: nil
+    )
+    XCTAssertFalse(u.dualPoolLines.isEmpty)
+    XCTAssertTrue(u.balanceDescription.contains("spendable"))
+  }
+
 }
