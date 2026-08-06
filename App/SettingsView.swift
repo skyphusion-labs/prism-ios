@@ -8,6 +8,7 @@ struct SettingsView: View {
   @State private var draftPlayURL: String = ""
   @State private var draftPlaneURL: String = ""
   @State private var pastedDeviceKey: String = ""
+  @State private var confirmClearKey = false
 
   var body: some View {
     Form {
@@ -221,6 +222,11 @@ struct SettingsView: View {
         .textInputAutocapitalization(.never)
         .autocorrectionDisabled()
       Button {
+        _ = state.pasteEnrollmentFromClipboard()
+      } label: {
+        Label("Paste from clipboard", systemImage: "doc.on.clipboard")
+      }
+      Button {
         Task { await state.enrollPlane() }
       } label: {
         if state.isBusy {
@@ -234,7 +240,7 @@ struct SettingsView: View {
       Text("Enrollment")
     } footer: {
       Text(
-        "Single-use token from the plane operator. The device key (pcp_…) is returned once and stored in the Keychain."
+        "Single-use token from the plane operator. The device key (pcp_…) is returned once and stored in the Keychain. Clipboard paste accepts a token or a full pcp_ key."
       )
     }
 
@@ -251,7 +257,19 @@ struct SettingsView: View {
       .disabled(pastedDeviceKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
       if state.deviceKeyPresent {
         Button("Clear device key", role: .destructive) {
-          Task { await state.clearDeviceKey() }
+          confirmClearKey = true
+        }
+        .confirmationDialog(
+          "Clear device key?",
+          isPresented: $confirmClearKey,
+          titleVisibility: .visible
+        ) {
+          Button("Clear key", role: .destructive) {
+            Task { await state.clearDeviceKey() }
+          }
+          Button("Cancel", role: .cancel) {}
+        } message: {
+          Text("This device will need a new enrollment token (or paste of a pcp_ key) before chatting or generating again.")
         }
       }
     } header: {

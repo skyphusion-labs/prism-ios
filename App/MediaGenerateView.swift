@@ -242,6 +242,12 @@ struct MediaGenerateView: View {
         state.useLastImageAsReference(forVideo: false)
       }
     }
+    if !state.imageImageRef.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      Button("Clear reference", role: .destructive) {
+        state.clearImageReference()
+      }
+      .accessibilityLabel("Clear image reference")
+    }
   }
 
   @ViewBuilder
@@ -257,6 +263,12 @@ struct MediaGenerateView: View {
       Button("Use last image as first frame") {
         state.useLastImageAsReference(forVideo: true)
       }
+    }
+    if !state.videoImageRef.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      Button("Clear reference", role: .destructive) {
+        state.clearVideoReference()
+      }
+      .accessibilityLabel("Clear video reference")
     }
   }
 

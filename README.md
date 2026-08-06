@@ -50,9 +50,9 @@ CI runs package tests on Ubuntu. The iOS app is built with Xcode locally (not in
 
 ## Status
 
-- Kit **0.6.3**: persist chat/image/video model + stream prefs; streaming "Thinking" indicator;
-  share transcript; image retry; About links; brand accent; SkyPhusion app icon. Prior: plane
-  health, haptics, empty state; model-switch context; StoreKit redeem; spend preview; media history.
+- Kit **0.6.4**: regenerate last reply (plane); offline banner; paste enroll/token; starter prompts;
+  clear media refs; confirm clear device key. Prior: persist prefs; stream UX; share; About; icon;
+  health/haptics; StoreKit redeem; spend preview; media history.
 - App Store Connect: app `6798391677`, three consumable credit IAPs. See `docs/TESTFLIGHT.md`,
   `docs/ASC-CHECKLIST.md`.
 

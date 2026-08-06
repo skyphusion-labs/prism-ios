@@ -11,6 +11,16 @@ struct ChatView: View {
 
   var body: some View {
     VStack(spacing: 0) {
+      if !state.isNetworkSatisfied {
+        Text("Offline · reconnect to send or generate")
+          .font(.caption.weight(.semibold))
+          .foregroundStyle(.white)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding(.horizontal)
+          .padding(.vertical, 6)
+          .background(Color.orange)
+          .accessibilityLabel("No network connection")
+      }
       if let banner = state.banner {
         Text(banner)
           .font(.caption)
@@ -41,7 +51,11 @@ struct ChatView: View {
                   && turn.role == .assistant
                   && turn.id == state.turns.last?.id
                   && turn.text.isEmpty,
-                onUseAsDraft: { state.useTurnAsDraft(turn) }
+                canRegenerate: state.canRegenerateLastReply
+                  && turn.id == state.turns.last?.id
+                  && turn.role == .assistant,
+                onUseAsDraft: { state.useTurnAsDraft(turn) },
+                onRegenerate: { state.regenerateLastReply() }
               )
               .id(turn.id)
             }
@@ -75,6 +89,16 @@ struct ChatView: View {
                 .frame(minHeight: 44)
             }
             .accessibilityLabel("Retry last failed message")
+          }
+          if state.canRegenerateLastReply {
+            Button {
+              state.regenerateLastReply()
+            } label: {
+              Label("Regenerate reply", systemImage: "arrow.triangle.2.circlepath")
+                .font(.footnote.weight(.semibold))
+                .frame(minHeight: 44)
+            }
+            .accessibilityLabel("Regenerate last assistant reply")
           }
         }
         .padding(.horizontal)
@@ -128,6 +152,17 @@ struct ChatView: View {
         .accessibilityLabel("Start new chat")
         .accessibilityHint("Clears conversation context")
       }
+      if state.canRegenerateLastReply {
+        ToolbarItem(placement: .topBarTrailing) {
+          Button {
+            state.regenerateLastReply()
+          } label: {
+            Image(systemName: "arrow.triangle.2.circlepath")
+          }
+          .accessibilityLabel("Regenerate last reply")
+          .accessibilityHint("Re-runs the last user message with the current model")
+        }
+      }
       if !state.turns.isEmpty {
         ToolbarItem(placement: .topBarTrailing) {
           Button {
@@ -180,7 +215,7 @@ private struct ChatEmptyState: View {
   @EnvironmentObject private var state: AppState
 
   var body: some View {
-    VStack(spacing: 12) {
+    VStack(spacing: 16) {
       Image(systemName: "bubble.left.and.bubble.right")
         .font(.system(size: 40))
         .foregroundStyle(.secondary)
@@ -203,10 +238,32 @@ private struct ChatEmptyState: View {
           .foregroundStyle(.orange)
           .multilineTextAlignment(.center)
       }
+
+      VStack(alignment: .leading, spacing: 8) {
+        Text("Try a starter")
+          .font(.caption.weight(.semibold))
+          .foregroundStyle(.secondary)
+        ForEach(AppState.starterPrompts, id: \.self) { prompt in
+          Button {
+            state.applyStarterPrompt(prompt)
+          } label: {
+            Text(prompt)
+              .font(.footnote)
+              .multilineTextAlignment(.leading)
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .padding(10)
+              .background(Color.secondary.opacity(0.12))
+              .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+          }
+          .buttonStyle(.plain)
+          .frame(minHeight: 44)
+          .accessibilityLabel("Starter: \(prompt)")
+        }
+      }
+      .frame(maxWidth: 360)
     }
-    .frame(maxWidth: 320)
     .frame(maxWidth: .infinity)
-    .accessibilityElement(children: .combine)
+    .accessibilityElement(children: .contain)
   }
 
   private var subtitle: String {
@@ -220,7 +277,9 @@ private struct ChatEmptyState: View {
 private struct TurnBubble: View {
   let turn: ChatTurn
   var isStreaming: Bool = false
+  var canRegenerate: Bool = false
   var onUseAsDraft: (() -> Void)?
+  var onRegenerate: (() -> Void)?
 
   var body: some View {
     HStack {
@@ -274,6 +333,11 @@ private struct TurnBubble: View {
             Button("Use as draft") {
               onUseAsDraft?()
               Haptics.light()
+            }
+          }
+          if canRegenerate {
+            Button("Regenerate") {
+              onRegenerate?()
             }
           }
         }
