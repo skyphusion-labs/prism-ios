@@ -36,6 +36,41 @@ Xcode → Settings → Accounts, select Team `858878N47M`, and let Automatic sig
 create an Apple Development (and, for archive upload, Distribution) certificate.
 There is no separate skyphusion org team to pick.
 
+### Signing errors (personal team, first device)
+
+**"Your team has no devices… generate a provisioning profile"** and  
+**"No profiles for org.skyphusion.prism"** mean Apple has no registered iOS
+device UDIDs on this membership. **Development** profiles always require at
+least one device. (App Store / TestFlight **distribution** profiles do not.)
+
+| Goal | What to do |
+| --- | --- |
+| Run on a physical iPhone | Plug in the phone (trust this computer), unlock it, pick it as the Xcode run destination. Xcode → Signing: Automatic + personal team. Xcode registers the UDID and mints an **iOS App Development** profile. Or register manually (below). |
+| TestFlight only (no phone plugged in) | In Xcode, set destination to **Any iOS Device (arm64)** (not a simulator). Product → **Archive**. That path uses **App Store** signing and does **not** need a development device list. Then Organizer → Distribute → App Store Connect. |
+| Simulator only | Simulator builds do not need a provisioning profile. Destination: iPhone 17 simulator (or any sim). |
+
+Register a device without Xcode (when you know the UDID from the phone:
+Settings → General → About → copy UDID via Finder/Xcode, or ask a friend’s
+device):
+
+```bash
+asc devices list                                    # currently empty until one is added
+asc devices register --name "Conrad iPhone" --udid "THE-UDID" --platform IOS
+# then in Xcode: Signing → Download Manual Profiles / toggle Automatic off→on
+```
+
+List what ASC already knows:
+
+```bash
+asc devices list
+asc bundle-ids list
+```
+
+**"Communication with Apple failed"** is usually separate: flaky network, Apple
+outage, or Accounts session stale. Sign out/in of the Apple ID under Xcode →
+Settings → Accounts, accept any unpaid agreements on
+[developer.apple.com/account](https://developer.apple.com/account), retry.
+
 ### Option B -- Xcode UI
 
 ```bash
