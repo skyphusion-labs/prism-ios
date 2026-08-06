@@ -9,7 +9,75 @@ import FoundationNetworking
 final class PrismKitTests: XCTestCase {
   func testHealthString() {
     XCTAssertEqual(PrismKit.health(), "ok:PrismKit")
-    XCTAssertEqual(PrismKit.version, "0.7.0")
+    XCTAssertEqual(PrismKit.version, "0.7.1")
+  }
+
+  func testConversationCompactSplitAndNormalize() {
+    let pairs = (0..<5).map {
+      ConversationCompact.Pair(user: "u\($0)", assistant: "a\($0)", throughTurnIndex: $0 * 2 + 1)
+    }
+    let split = ConversationCompact.splitPairs(pairs, keepRecent: 2)
+    XCTAssertEqual(split.summarize.count, 3)
+    XCTAssertEqual(split.keep.count, 2)
+    XCTAssertEqual(split.keep.first?.user, "u3")
+    let long = String(repeating: "x", count: ConversationCompact.summaryMaxChars + 50)
+    let norm = ConversationCompact.normalizeSummary(long)
+    XCTAssertTrue(norm.hasSuffix("[summary truncated]"))
+    XCTAssertLessThanOrEqual(norm.count, ConversationCompact.summaryMaxChars + 40)
+    let block = ConversationCompactState(
+      summary: "User chose blue.",
+      through_turn_index: 3,
+      keep_recent: 2,
+      model: "m"
+    ).systemBlock
+    XCTAssertTrue(block.contains("[Compacted earlier conversation]"))
+    XCTAssertTrue(block.contains("User chose blue."))
+  }
+
+  func testConversationCompactStateRoundTrip() throws {
+    let json = """
+    {"summary":"Earlier: user likes cats.","through_turn_index":3,"keep_recent":2,"model":"@cf/meta/llama-3.2-3b-instruct","updated_at":"2026-08-05T12:00:00.000Z"}
+    """.data(using: .utf8)!
+    let state = try JSONDecoder().decode(ConversationCompactState.self, from: json)
+    XCTAssertEqual(state.summary, "Earlier: user likes cats.")
+    XCTAssertEqual(state.through_turn_index, 3)
+    XCTAssertEqual(state.keep_recent, 2)
+    XCTAssertEqual(state.model, "@cf/meta/llama-3.2-3b-instruct")
+    let encoded = try JSONEncoder().encode(state)
+    let again = try JSONDecoder().decode(ConversationCompactState.self, from: encoded)
+    XCTAssertEqual(again, state)
+  }
+
+  func testConversationCompactRequestEncode() throws {
+    let body = ConversationCompactRequest(keepRecent: 2, model: "m1")
+    let data = try JSONEncoder().encode(body)
+    let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+    XCTAssertEqual(obj?["keep_recent"] as? Int, 2)
+    XCTAssertEqual(obj?["model"] as? String, "m1")
+  }
+
+  func testConversationCompactResponseDecode() throws {
+    let json = """
+    {"conversation_id":"c1","compact":{"summary":"sum","through_turn_index":1,"keep_recent":2,"model":"m","updated_at":"t"},"turns_summarized":2,"turns_kept_raw":2}
+    """.data(using: .utf8)!
+    let res = try JSONDecoder().decode(ConversationCompactResponse.self, from: json)
+    XCTAssertEqual(res.conversation_id, "c1")
+    XCTAssertEqual(res.compact?.summary, "sum")
+    XCTAssertEqual(res.turns_summarized, 2)
+    XCTAssertEqual(res.turns_kept_raw, 2)
+  }
+
+  func testConversationCompactClearAndDetailDecode() throws {
+    let clearJSON = #"{"conversation_id":"c1","compact":null,"cleared":true}"#.data(using: .utf8)!
+    let clear = try JSONDecoder().decode(ConversationCompactClearResponse.self, from: clearJSON)
+    XCTAssertEqual(clear.conversation_id, "c1")
+    XCTAssertNil(clear.compact)
+    XCTAssertEqual(clear.cleared, true)
+
+    let detailJSON = #"{"conversation_id":"c9","compact":{"summary":"s","through_turn_index":0,"keep_recent":2,"model":"m"},"turns":[]}"#.data(using: .utf8)!
+    let detail = try JSONDecoder().decode(ConversationDetailResponse.self, from: detailJSON)
+    XCTAssertEqual(detail.conversation_id, "c9")
+    XCTAssertEqual(detail.compact?.summary, "s")
   }
 
   func testSpeechGenerationResponseDecode() throws {
@@ -362,6 +430,52 @@ final class PrismClientHTTPTests: XCTestCase {
     let (text, final) = try await client.chatStreamText(ChatRequestBody(model: "m", userInput: "x"))
     XCTAssertEqual(text, "A")
     XCTAssertEqual(final?.output, "A")
+  }
+
+  func testCompactConversationPOST() async throws {
+    MockURLProtocol.handler = { req in
+      XCTAssertEqual(req.httpMethod, "POST")
+      XCTAssertEqual(req.url?.path, "/api/conversations/c1/compact")
+      if let body = req.httpBody,
+         let obj = try? JSONSerialization.jsonObject(with: body) as? [String: Any]
+      {
+        XCTAssertEqual(obj["keep_recent"] as? Int, 2)
+        XCTAssertEqual(obj["model"] as? String, "chat-m")
+      }
+      let res = """
+      {"conversation_id":"c1","compact":{"summary":"brief","through_turn_index":4,"keep_recent":2,"model":"chat-m","updated_at":"t"},"turns_summarized":3,"turns_kept_raw":2}
+      """.data(using: .utf8)!
+      return (200, res, ["Content-Type": "application/json"])
+    }
+    let client = makeClient()
+    let res = try await client.compactConversation(id: "c1", keepRecent: 2, model: "chat-m")
+    XCTAssertEqual(res.compact?.summary, "brief")
+    XCTAssertEqual(res.turns_summarized, 3)
+  }
+
+  func testClearConversationCompactDELETE() async throws {
+    MockURLProtocol.handler = { req in
+      XCTAssertEqual(req.httpMethod, "DELETE")
+      XCTAssertEqual(req.url?.path, "/api/conversations/c1/compact")
+      let res = #"{"conversation_id":"c1","compact":null,"cleared":true}"#.data(using: .utf8)!
+      return (200, res, ["Content-Type": "application/json"])
+    }
+    let client = makeClient()
+    let res = try await client.clearConversationCompact(id: "c1")
+    XCTAssertEqual(res.cleared, true)
+    XCTAssertNil(res.compact)
+  }
+
+  func testGetConversationIncludesCompact() async throws {
+    MockURLProtocol.handler = { req in
+      XCTAssertEqual(req.httpMethod, "GET")
+      XCTAssertEqual(req.url?.path, "/api/conversations/c2")
+      let res = #"{"conversation_id":"c2","compact":{"summary":"s","through_turn_index":1,"keep_recent":2,"model":"m"},"turns":[]}"#.data(using: .utf8)!
+      return (200, res, ["Content-Type": "application/json"])
+    }
+    let client = makeClient()
+    let res = try await client.getConversation(id: "c2")
+    XCTAssertEqual(res.compact?.summary, "s")
   }
 }
 

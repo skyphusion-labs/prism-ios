@@ -292,6 +292,75 @@ public struct AuthSuccess: Codable, Sendable, Equatable {
   public let error: String?
 }
 
+// MARK: - Conversation compact (playground Worker v0.175.7)
+
+/// Compact summary the Worker injects into model context instead of older raw turns.
+/// The full UI transcript is unchanged; only the wire history shrinks.
+public struct ConversationCompactState: Codable, Sendable, Equatable {
+  public var summary: String
+  /// Highest server `turn_index` covered by the summary.
+  public var through_turn_index: Int
+  public var keep_recent: Int
+  public var model: String
+  public var updated_at: String?
+
+  public init(
+    summary: String,
+    through_turn_index: Int,
+    keep_recent: Int,
+    model: String,
+    updated_at: String? = nil
+  ) {
+    self.summary = summary
+    self.through_turn_index = through_turn_index
+    self.keep_recent = keep_recent
+    self.model = model
+    self.updated_at = updated_at
+  }
+
+  /// System block to prepend when compact is active (matches prism `buildCompactSystemBlock`).
+  public var systemBlock: String {
+    ConversationCompact.buildSystemBlock(summary: summary)
+  }
+}
+
+/// `POST /api/conversations/:id/compact` body.
+public struct ConversationCompactRequest: Codable, Sendable, Equatable {
+  public var keep_recent: Int?
+  public var model: String?
+
+  public init(keepRecent: Int? = 2, model: String? = nil) {
+    self.keep_recent = keepRecent
+    self.model = model
+  }
+}
+
+/// `POST /api/conversations/:id/compact` response.
+public struct ConversationCompactResponse: Codable, Sendable, Equatable {
+  public let conversation_id: String?
+  public let compact: ConversationCompactState?
+  public let turns_summarized: Int?
+  public let turns_kept_raw: Int?
+  public let ai_gateway_log_id: String?
+  public let error: String?
+  public let code: String?
+}
+
+/// `DELETE /api/conversations/:id/compact` response.
+public struct ConversationCompactClearResponse: Codable, Sendable, Equatable {
+  public let conversation_id: String?
+  public let compact: ConversationCompactState?
+  public let cleared: Bool?
+  public let error: String?
+}
+
+/// Minimal `GET /api/conversations/:id` envelope (turns optional; compact is the compact field).
+public struct ConversationDetailResponse: Codable, Sendable, Equatable {
+  public let conversation_id: String?
+  public let compact: ConversationCompactState?
+  public let error: String?
+}
+
 // MARK: - Chat (playground Worker)
 
 public struct ChatRequestBody: Codable, Sendable, Equatable {

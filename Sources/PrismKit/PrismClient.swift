@@ -177,4 +177,58 @@ public final class PrismClient: @unchecked Sendable {
     if let out = final?.output, !out.isEmpty { return (out, final) }
     return (joined, final)
   }
+
+  // MARK: - Conversation compact (playground v0.175.7)
+
+  /// Summarize older turns on the Worker. Next chat injects the summary and only
+  /// re-sends recent raw turns. Full UI transcript is unchanged.
+  ///
+  /// Conversation ids from the Worker are path-safe (no `/`); we do not pre-encode
+  /// because `URLComponents.path` would double-encode `%`.
+  public func compactConversation(
+    id: String,
+    keepRecent: Int = 2,
+    model: String? = nil
+  ) async throws -> ConversationCompactResponse {
+    let res: ConversationCompactResponse = try await http.sendJSON(
+      method: "POST",
+      path: "/api/conversations/\(id)/compact",
+      body: ConversationCompactRequest(keepRecent: keepRecent, model: model),
+      headers: defaultHeaders
+    )
+    if let err = res.error, !err.isEmpty {
+      throw PrismError.serverError(err)
+    }
+    guard res.compact != nil else {
+      throw PrismError.serverError("Compact returned no state")
+    }
+    return res
+  }
+
+  /// Clear compact so the next turn uses full raw history again (Expand).
+  @discardableResult
+  public func clearConversationCompact(id: String) async throws -> ConversationCompactClearResponse {
+    let res: ConversationCompactClearResponse = try await http.sendJSON(
+      method: "DELETE",
+      path: "/api/conversations/\(id)/compact",
+      headers: defaultHeaders
+    )
+    if let err = res.error, !err.isEmpty {
+      throw PrismError.serverError(err)
+    }
+    return res
+  }
+
+  /// Fetch conversation metadata including optional `compact` (not a full transcript browser).
+  public func getConversation(id: String) async throws -> ConversationDetailResponse {
+    let res: ConversationDetailResponse = try await http.sendJSON(
+      method: "GET",
+      path: "/api/conversations/\(id)",
+      headers: defaultHeaders
+    )
+    if let err = res.error, !err.isEmpty {
+      throw PrismError.serverError(err)
+    }
+    return res
+  }
 }
