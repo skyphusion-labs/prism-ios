@@ -226,7 +226,8 @@ public final class ControlPlaneClient: @unchecked Sendable {
       path: "/v1/images/generations",
       body: body,
       bearer: key,
-      timeout: Self.nonChatTimeout
+      timeout: Self.nonChatTimeout,
+      preferBackground: true
     )
     if let err = res.error {
       throw PrismError.serverError(err.message ?? err.code ?? "image generation error")
@@ -242,6 +243,8 @@ public final class ControlPlaneClient: @unchecked Sendable {
   }
 
   /// `POST /v1/videos/generations` -- `video` is a URL or inline asset.
+  /// On iOS uses a background URLSession (best-effort; multi-minute idle waits
+  /// still may not survive lock -- plane is synchronous request/response).
   public func generateVideo(_ body: VideoGenerationRequest) async throws -> VideoGenerationResponse {
     let key = try requireKey()
     let res: VideoGenerationResponse = try await http.sendJSON(
@@ -249,7 +252,8 @@ public final class ControlPlaneClient: @unchecked Sendable {
       path: "/v1/videos/generations",
       body: body,
       bearer: key,
-      timeout: Self.nonChatTimeout
+      timeout: Self.musicTimeout,
+      preferBackground: true
     )
     if let err = res.error {
       throw PrismError.serverError(err.message ?? err.code ?? "video generation error")
@@ -311,6 +315,7 @@ public final class ControlPlaneClient: @unchecked Sendable {
   }
 
   /// `POST /v1/music/generations` -- metered music; `audio` is URL or inline asset.
+  /// On iOS uses a background URLSession (best-effort under brief suspension).
   public func generateMusic(_ body: MusicGenerationRequest) async throws -> MusicGenerationResponse {
     let key = try requireKey()
     let res: MusicGenerationResponse = try await http.sendJSON(
@@ -318,7 +323,8 @@ public final class ControlPlaneClient: @unchecked Sendable {
       path: "/v1/music/generations",
       body: body,
       bearer: key,
-      timeout: Self.musicTimeout
+      timeout: Self.musicTimeout,
+      preferBackground: true
     )
     if let err = res.error {
       throw PrismError.serverError(err.message ?? err.code ?? "music generation error")

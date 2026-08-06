@@ -739,7 +739,7 @@ final class AppState: ObservableObject {
     let estimate = musicLyrics.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
       ? "often 2-4 min"
       : "often 3-5 min"
-    return "Elapsed \(elapsed) · \(estimate) · safe to leave tab"
+    return "Elapsed \(elapsed) · \(estimate) · stay in Prism (screen stays on)"
   }
 
   private func pushMediaHistory(_ item: MediaHistoryItem) {
@@ -2140,7 +2140,8 @@ final class AppState: ObservableObject {
     mediaBusy = true
     mediaError = nil
     mediaStatus =
-      "Generating \(model.model) · often 1-3 min. You can leave this tab; result stays here."
+      "Generating \(model.model) · often 1-3 min. Stay in Prism; screen stays on. "
+        + "Locking or force-quitting can cancel the run."
     lastVideoURL = nil
     beginVideoBackgroundWork()
     startMediaTimer()
@@ -2617,7 +2618,8 @@ final class AppState: ObservableObject {
     musicBusy = true
     musicError = nil
     musicStatus =
-      "Generating \(model.model) · often 2-4 min (up to ~5 with lyrics). Safe to leave the tab; keep Prism open or unlocked if you can."
+      "Generating \(model.model) · often 2-4 min (up to ~5 with lyrics). Stay in Prism; screen stays on. "
+        + "Locking or force-quitting can cancel the run."
     lastMusicAudio = nil
     lastMusicData = nil
     lastMusicLocalURL = nil
@@ -2884,8 +2886,14 @@ final class AppState: ObservableObject {
     }
   }
 
-  /// Background task ids while long gens run (iOS). Extends execution a bit after
-  /// lock/app-switch so URLSession is not killed mid-request.
+  /// Background task ids while long gens run (iOS).
+  ///
+  /// Reality check: video/music are **synchronous** plane POSTs that hold the
+  /// connection open for minutes. iOS does not guarantee that survives lock or
+  /// leaving the app (`beginBackgroundTask` is ~30s; background URLSession is
+  /// built for file transfer, not multi-minute idle server waits). What we *can*
+  /// do: keep the screen awake so auto-lock does not kill the run, and take a
+  /// short background grace on brief app switches. Honest UI must not claim lock-safe.
   #if canImport(UIKit)
   private var videoBackgroundTask: UIBackgroundTaskIdentifier = .invalid
   private var musicBackgroundTask: UIBackgroundTaskIdentifier = .invalid
@@ -2897,6 +2905,8 @@ final class AppState: ObservableObject {
     videoBackgroundTask = UIApplication.shared.beginBackgroundTask(withName: "prism.video") { [weak self] in
       self?.endVideoBackgroundWork()
     }
+    // Prevent auto-lock while Prism is still foreground; does not survive manual lock.
+    UIApplication.shared.isIdleTimerDisabled = true
     #endif
   }
 
@@ -2905,6 +2915,9 @@ final class AppState: ObservableObject {
     if videoBackgroundTask != .invalid {
       UIApplication.shared.endBackgroundTask(videoBackgroundTask)
       videoBackgroundTask = .invalid
+    }
+    if musicBackgroundTask == .invalid {
+      UIApplication.shared.isIdleTimerDisabled = false
     }
     #endif
   }
@@ -2915,8 +2928,6 @@ final class AppState: ObservableObject {
     musicBackgroundTask = UIApplication.shared.beginBackgroundTask(withName: "prism.music") { [weak self] in
       self?.endMusicBackgroundWork()
     }
-    // Keep the screen awake while the user is still in Prism so lock does not
-    // suspend the request mid-generation (full tracks often 2-4 min + rehost).
     UIApplication.shared.isIdleTimerDisabled = true
     #endif
   }
@@ -2927,7 +2938,6 @@ final class AppState: ObservableObject {
       UIApplication.shared.endBackgroundTask(musicBackgroundTask)
       musicBackgroundTask = .invalid
     }
-    // Only clear idle timer if video is not also holding a long run.
     if videoBackgroundTask == .invalid {
       UIApplication.shared.isIdleTimerDisabled = false
     }

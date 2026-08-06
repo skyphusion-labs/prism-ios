@@ -376,9 +376,9 @@ struct MediaGenerateView: View {
     let r = s % 60
     if kind == .video {
       if m > 0 {
-        return String(format: "Elapsed %d:%02d · often 1-3 min · safe to leave tab", m, r)
+        return String(format: "Elapsed %d:%02d · often 1-3 min · stay in Prism", m, r)
       }
-      return "Elapsed \(s)s · often 1-3 min · safe to leave tab"
+      return "Elapsed \(s)s · often 1-3 min · stay in Prism"
     }
     if m > 0 {
       return String(format: "Elapsed %d:%02d", m, r)
@@ -461,7 +461,8 @@ struct MediaGenerateView: View {
     if mid.hasPrefix("xai/grok-imagine-video") {
       return "Grok video on plane 0.4.14+ uses a ZDR upload path (play-proxy media URL). Prefer Veo / Seedance Fast if it still fails."
     }
-    return "Veo and Seedance Fast are most reliable. Full Seedance may take up to ~3 min."
+    return "Veo and Seedance Fast are most reliable. Full Seedance may take up to ~3 min. "
+      + "Stay in Prism (screen stays on). Locking the phone can cancel the run."
   }
 
   #if canImport(UIKit)

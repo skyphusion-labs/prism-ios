@@ -5,6 +5,7 @@ private let skyphusionAccent = Color(red: 29 / 255, green: 78 / 255, blue: 216 /
 
 @main
 struct PrismApp: App {
+  @UIApplicationDelegateAdaptor(PrismAppDelegate.self) private var appDelegate
   @StateObject private var state = AppState()
   @Environment(\.scenePhase) private var scenePhase
 
@@ -17,6 +18,7 @@ struct PrismApp: App {
           switch phase {
           case .background:
             // Re-lock only when fully backgrounded (not Face ID sheet inactive).
+            // Does not cancel long gens; iOS may still suspend the network wait.
             state.lockIfNeeded()
           case .active:
             Task { await state.onBecomeActive() }
