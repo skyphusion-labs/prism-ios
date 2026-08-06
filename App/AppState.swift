@@ -1581,6 +1581,7 @@ final class AppState: ObservableObject {
           updateAssistant(id: assistantId, text: assembled)
         case .done(let final):
           if assembled.isEmpty, let out = final.output, !out.isEmpty {
+            assembled = out
             updateAssistant(id: assistantId, text: out)
           }
         case .error(let m):
@@ -1589,10 +1590,18 @@ final class AppState: ObservableObject {
           break
         }
       }
+      // Stream closed with no text (mobile idle / partial body). Fall back to non-stream once
+      // rather than showing Empty stream completion for models that still work buffered.
       if assembled.isEmpty,
          let i = turns.firstIndex(where: { $0.id == assistantId }),
-         turns[i].text.isEmpty {
-        throw PrismError.serverError("Empty stream completion")
+         turns[i].text.isEmpty
+      {
+        let text = try await controlPlane.chat(model: model.model, messages: messages)
+        try Task.checkCancellation()
+        guard !text.isEmpty else {
+          throw PrismError.serverError("Empty stream completion")
+        }
+        updateAssistant(id: assistantId, text: text)
       }
     } else {
       let text = try await controlPlane.chat(model: model.model, messages: messages)
