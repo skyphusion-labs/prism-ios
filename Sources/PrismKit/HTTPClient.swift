@@ -78,10 +78,13 @@ public final class HTTPClient: @unchecked Sendable {
     return req
   }
 
-  public func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+  public func send(
+    _ request: URLRequest,
+    preferBackground: Bool = false
+  ) async throws -> (Data, HTTPURLResponse) {
     let pair: (Data, URLResponse)
     do {
-      pair = try await perform(request)
+      pair = try await perform(request, preferBackground: preferBackground)
     } catch {
       throw PrismError.transport(error.localizedDescription)
     }
@@ -103,7 +106,22 @@ public final class HTTPClient: @unchecked Sendable {
   }
 
   /// URLSession.data(for:) is Apple-only in some toolchains; bridge via completion handler for Linux CI.
-  private func perform(_ request: URLRequest) async throws -> (Data, URLResponse) {
+  ///
+  /// When `preferBackground` is true on iOS, uses ``LongRunningURLSession`` so the
+  /// request continues after lock / home (video, music, long non-chat doors).
+  private func perform(
+    _ request: URLRequest,
+    preferBackground: Bool
+  ) async throws -> (Data, URLResponse) {
+    #if os(iOS)
+    if preferBackground {
+      return try await LongRunningURLSession.shared.perform(request)
+    }
+    #endif
+    return try await performForeground(request)
+  }
+
+  private func performForeground(_ request: URLRequest) async throws -> (Data, URLResponse) {
     try await withCheckedThrowingContinuation { cont in
       let task = session.dataTask(with: request) { data, response, error in
         if let error {
@@ -128,7 +146,8 @@ public final class HTTPClient: @unchecked Sendable {
     bearer: String? = nil,
     as type: T.Type = T.self,
     okStatuses: Set<Int> = Set(200...299),
-    timeout: TimeInterval? = nil
+    timeout: TimeInterval? = nil,
+    preferBackground: Bool = false
   ) async throws -> T {
     let pair: (HTTPURLResponse, T) = try await sendJSONWithResponse(
       method: method,
@@ -138,7 +157,8 @@ public final class HTTPClient: @unchecked Sendable {
       bearer: bearer,
       as: type,
       okStatuses: okStatuses,
-      timeout: timeout
+      timeout: timeout,
+      preferBackground: preferBackground
     )
     return pair.1
   }
@@ -152,7 +172,8 @@ public final class HTTPClient: @unchecked Sendable {
     bearer: String? = nil,
     as type: T.Type = T.self,
     okStatuses: Set<Int> = Set(200...299),
-    timeout: TimeInterval? = nil
+    timeout: TimeInterval? = nil,
+    preferBackground: Bool = false
   ) async throws -> (HTTPURLResponse, T) {
     let dataBody: Data?
     if let body {
@@ -168,7 +189,7 @@ public final class HTTPClient: @unchecked Sendable {
       bearer: bearer,
       timeout: timeout
     )
-    let (data, http) = try await send(req)
+    let (data, http) = try await send(req, preferBackground: preferBackground)
     if !okStatuses.contains(http.statusCode) {
       throw Self.prismError(from: data, status: http.statusCode)
     }

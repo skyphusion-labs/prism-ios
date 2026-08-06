@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		04B9CBBF92D60EB6483FE5B5 /* LivePCMCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = 23A68163390DA2D20D8511F7 /* LivePCMCapture.swift */; };
+		14A471A4329F34C152C5D24E /* PrismAppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = B99FA95732A5A2E189F8BE2D /* PrismAppDelegate.swift */; };
 		15F542070E4ECF32304AE4D4 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8DC2EA274A0490B6F0DEC5FD /* RootView.swift */; };
 		16D11E1C37D023255B71B397 /* ModelPickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80E2E3B365ADCF50760B2280 /* ModelPickerView.swift */; };
 		33360F83FD87F9DD968DFA2F /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94567EB75BC9121E95247AB1 /* LoginView.swift */; };
@@ -83,6 +84,7 @@
 		94567EB75BC9121E95247AB1 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		AF2A06FA03AA3BC3922B359C /* AudioRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorder.swift; sourceTree = "<group>"; };
 		B380EA7A1F0D104D733EB197 /* MediaGenerateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaGenerateView.swift; sourceTree = "<group>"; };
+		B99FA95732A5A2E189F8BE2D /* PrismAppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrismAppDelegate.swift; sourceTree = "<group>"; };
 		BD8D043C7F09299F5FD7D77C /* BundledLegalText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BundledLegalText.swift; sourceTree = "<group>"; };
 		BF2166C757BF46326F065EC8 /* MoreHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoreHubView.swift; sourceTree = "<group>"; };
 		C4115D7B498B51A37C0C1059 /* PrismApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrismApp.swift; sourceTree = "<group>"; };
@@ -148,6 +150,7 @@
 				303C401457C10158AA627CEB /* OnboardingView.swift */,
 				C53EA09CC97931EB498F64DB /* Prism.entitlements */,
 				C4115D7B498B51A37C0C1059 /* PrismApp.swift */,
+				B99FA95732A5A2E189F8BE2D /* PrismAppDelegate.swift */,
 				3F68E37E40EC71808CA5FCDB /* PrismIntents.swift */,
 				8DC2EA274A0490B6F0DEC5FD /* RootView.swift */,
 				63C1660433159F3E5363F65D /* SessionListView.swift */,
@@ -293,6 +296,7 @@
 				51A7DFE10E20F58251B37E68 /* MusicGenerateView.swift in Sources */,
 				57305F9F30C177CBAB68B148 /* OnboardingView.swift in Sources */,
 				C6F007D55BBA410ABB9E2DF1 /* PrismApp.swift in Sources */,
+				14A471A4329F34C152C5D24E /* PrismAppDelegate.swift in Sources */,
 				F35283735B0CA3C79A42F95D /* PrismIntents.swift in Sources */,
 				15F542070E4ECF32304AE4D4 /* RootView.swift in Sources */,
 				DF8F9E7B6ADC379B646D172C /* SessionListView.swift in Sources */,
@@ -327,13 +331,13 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Widget/PrismWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 19;
+				CURRENT_PROJECT_VERSION = 20;
 				DEVELOPMENT_TEAM = 858878N47M;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Widget/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
-				MARKETING_VERSION = 0.8.4;
+				MARKETING_VERSION = 0.8.5;
 				PRODUCT_BUNDLE_IDENTIFIER = org.skyphusion.prism.widget;
 				PRODUCT_NAME = PrismWidget;
 				SDKROOT = iphoneos;
@@ -410,7 +414,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 19;
+				CURRENT_PROJECT_VERSION = 20;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = 858878N47M;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -431,7 +435,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 0.8.4;
+				MARKETING_VERSION = 0.8.5;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -478,7 +482,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_STYLE = Automatic;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 19;
+				CURRENT_PROJECT_VERSION = 20;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = 858878N47M;
 				ENABLE_NS_ASSERTIONS = NO;
@@ -493,7 +497,7 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				MACOSX_DEPLOYMENT_TARGET = 13.0;
-				MARKETING_VERSION = 0.8.4;
+				MARKETING_VERSION = 0.8.5;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -509,13 +513,13 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = Widget/PrismWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 19;
+				CURRENT_PROJECT_VERSION = 20;
 				DEVELOPMENT_TEAM = 858878N47M;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Widget/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
-				MARKETING_VERSION = 0.8.4;
+				MARKETING_VERSION = 0.8.5;
 				PRODUCT_BUNDLE_IDENTIFIER = org.skyphusion.prism.widget;
 				PRODUCT_NAME = PrismWidget;
 				SDKROOT = iphoneos;
