@@ -53,6 +53,9 @@ struct SettingsView: View {
           }
         }
         row("Models", "\(state.models.count)")
+        if state.backend == .controlPlane {
+          row("Plane health", state.planeHealthLabel)
+        }
         row("Kit", "\(PrismKit.name) \(PrismKit.version)")
       } header: {
         Text("Session")
@@ -61,6 +64,11 @@ struct SettingsView: View {
       Section {
         Button("Refresh models") {
           Task { await state.refreshModels() }
+        }
+        if state.backend == .controlPlane {
+          Button("Check plane health") {
+            Task { await state.probePlaneHealth() }
+          }
         }
         if state.backend == .playground, state.authenticated {
           Button("Sign out", role: .destructive) {

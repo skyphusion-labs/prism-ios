@@ -102,15 +102,18 @@ final class StoreManager: ObservableObject {
       }
       if res.applied == true {
         statusMessage = "Credit applied (\(usd)). Balance refresh…"
+        Haptics.success()
       } else {
         statusMessage = "Already redeemed (tx \(transaction.id)). Balance refresh…"
+        Haptics.light()
       }
       await onRedeemed?()
       return true
     } catch {
-      // Do not finish on redeem failure — StoreKit will redeliver via Transaction.updates.
+      // Do not finish on redeem failure -- StoreKit will redeliver via Transaction.updates.
       errorMessage = prismUserFacingError(error)
       statusMessage = "Purchase verified; credit apply failed. Will retry."
+      Haptics.error()
       return false
     }
   }

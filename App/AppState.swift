@@ -165,6 +165,21 @@ final class AppState: ObservableObject {
   @Published var isBusy: Bool = false
   @Published var banner: String?
   @Published var errorMessage: String?
+  /// Last plane `GET /health` probe (`nil` = not probed yet).
+  @Published var planeHealthOK: Bool?
+  @Published var planeHealthService: String?
+  /// Short label for Settings / empty states.
+  var planeHealthLabel: String {
+    guard backend == .controlPlane else { return "n/a" }
+    switch planeHealthOK {
+    case .none: return "not checked"
+    case .some(true):
+      if let s = planeHealthService, !s.isEmpty { return "ok · \(s)" }
+      return "ok"
+    case .some(false):
+      return "unreachable"
+    }
+  }
 
   private let secrets: any SecretStore
   private var playground: PrismClient
@@ -397,7 +412,42 @@ final class AppState: ObservableObject {
 
   func bootstrap() async {
     rebuildClients(clearSession: false)
+    if backend == .controlPlane {
+      await probePlaneHealth()
+    }
     await refreshModels()
+  }
+
+  /// Foreground resume: cheap health + balance/models refresh when enrolled.
+  func onBecomeActive() async {
+    if backend == .controlPlane {
+      await probePlaneHealth()
+      if deviceKeyPresent {
+        await refreshPlaneBalanceOnly()
+      }
+    }
+  }
+
+  /// Unauthenticated `GET /health` on the control plane origin.
+  func probePlaneHealth() async {
+    do {
+      let h = try await controlPlane.health()
+      planeHealthOK = h.ok
+      planeHealthService = h.service
+      if !h.ok {
+        // Surface soft status without clobbering a richer model banner if we already have one.
+        if banner == nil || banner?.contains("error") == true || banner?.contains("unreachable") == true {
+          banner = "Control plane · health not ok"
+        }
+      }
+    } catch {
+      planeHealthOK = false
+      planeHealthService = nil
+      // Only overwrite banner when we have no models yet (cold start / offline).
+      if models.isEmpty {
+        banner = "Control plane · unreachable (\(prismUserFacingError(error)))"
+      }
+    }
   }
 
   func loadPersisted() {
@@ -528,10 +578,13 @@ final class AppState: ObservableObject {
 
   private func refreshPlaneModels() async {
     authMode = "control-plane"
+    // Always re-probe health when refreshing plane catalog (cheap, no auth).
+    await probePlaneHealth()
     guard deviceKeyPresent else {
       models = []
       planeUsageLines = []
-      banner = "Control plane · no device key · enroll in Settings"
+      let health = planeHealthOK == false ? " · plane unreachable" : ""
+      banner = "Control plane · no device key · enroll in Settings\(health)"
       return
     }
     do {
@@ -547,6 +600,7 @@ final class AppState: ObservableObject {
     } catch {
       errorMessage = prismUserFacingError(error)
       banner = "Control plane · error loading models"
+      Haptics.error()
     }
   }
 
@@ -681,10 +735,12 @@ final class AppState: ObservableObject {
       deviceKeyPresent = true
       enrollmentToken = ""
       planeClientLabel = res.client_id
+      Haptics.success()
       await refreshModels()
     } catch {
       errorMessage = prismUserFacingError(error)
       deviceKeyPresent = false
+      Haptics.error()
     }
   }
 
@@ -780,15 +836,18 @@ final class AppState: ObservableObject {
         try await sendPlane(model: model, assistantId: assistantId)
       }
       clearChatFailure()
+      Haptics.success()
     } catch is CancellationError {
       updateAssistant(id: assistantId, text: "(cancelled)")
       errorMessage = PrismError.cancelled.userFacingMessage
       recordChatFailure(userText: text)
+      Haptics.warning()
     } catch {
       let msg = prismUserFacingError(error)
       updateAssistant(id: assistantId, text: "(error) \(msg)")
       errorMessage = msg
       recordChatFailure(userText: text)
+      Haptics.error()
     }
   }
 
@@ -996,13 +1055,16 @@ final class AppState: ObservableObject {
           imageURL: lastImageURL
         )
       )
+      Haptics.success()
       await refreshPlaneBalanceOnly()
     } catch is CancellationError {
       mediaError = PrismError.cancelled.userFacingMessage
       mediaStatus = nil
+      Haptics.warning()
     } catch {
       mediaError = prismUserFacingError(error)
       mediaStatus = nil
+      Haptics.error()
     }
   }
 
@@ -1027,7 +1089,7 @@ final class AppState: ObservableObject {
     }
     mediaBusy = true
     mediaError = nil
-    mediaStatus = "Generating \(model.model) (often 1–3 min)…"
+    mediaStatus = "Generating \(model.model) (often 1-3 min)…"
     lastVideoURL = nil
     startMediaTimer()
     defer {
@@ -1053,13 +1115,16 @@ final class AppState: ObservableObject {
           videoURL: lastVideoURL
         )
       )
+      Haptics.success()
       await refreshPlaneBalanceOnly()
     } catch is CancellationError {
       mediaError = PrismError.cancelled.userFacingMessage
       mediaStatus = nil
+      Haptics.warning()
     } catch {
       mediaError = prismUserFacingError(error)
       mediaStatus = "Failed after \(mediaElapsedSeconds)s · prompt kept for Retry"
+      Haptics.error()
     }
   }
 
