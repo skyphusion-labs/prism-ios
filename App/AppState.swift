@@ -870,19 +870,26 @@ final class AppState: ObservableObject {
     rebuildClients(clearSession: false)
     if backend == .controlPlane {
       await probePlaneHealth()
+      if deviceKeyPresent {
+        // Cold start: pick up Workflow jobs that finished while the app was dead.
+        await forceSyncPendingJobs()
+      }
     }
     await refreshModels()
   }
 
-  /// Foreground resume: cheap health + balance when unlocked (lock happens on background).
+  /// Foreground resume: always re-check plane jobs (even under biometric lock UI).
+  /// Suspended poll Tasks keep `musicBusy`/`mediaBusy` true, so a `!busy` resume never ran.
   func onBecomeActive() async {
+    if backend == .controlPlane, deviceKeyPresent {
+      // Force-sync pending Workflow jobs first so a finished song appears after unlock.
+      await forceSyncPendingJobs()
+    }
     guard !isBiometricallyLocked else { return }
     if backend == .controlPlane {
       await probePlaneHealth()
       if deviceKeyPresent {
         await refreshPlaneBalanceOnly()
-        // Resume poll if lock cancelled the local Task but the plane job kept running.
-        await resumePendingAsyncJobsIfNeeded()
       }
     }
   }
@@ -915,9 +922,9 @@ final class AppState: ObservableObject {
       isBiometricallyLocked = false
       Haptics.success()
       if backend == .controlPlane, deviceKeyPresent {
+        await forceSyncPendingJobs()
         await probePlaneHealth()
         await refreshPlaneBalanceOnly()
-        await resumePendingAsyncJobsIfNeeded()
       }
     } else {
       Haptics.warning()
@@ -2254,28 +2261,9 @@ final class AppState: ObservableObject {
       let msg = job.error?.message ?? job.error?.code ?? "Video job failed"
       throw PrismError.serverError(msg)
     }
-    guard let v = job.result?.video, !v.isEmpty else {
-      clearPendingVideoJob()
-      throw PrismError.serverError("Video job finished with no URL")
-    }
-    clearPendingVideoJob()
-    lastVideoModel = job.result?.model ?? job.model ?? fallbackModel
-    lastVideoURL = await Self.waitUntilMediaReachable(v) ?? v
-    mediaStatus = "Done · \(lastVideoModel ?? fallbackModel) · \(mediaElapsedSeconds)s"
-    pushMediaHistory(
-      MediaHistoryItem(
-        kind: .video,
-        model: lastVideoModel ?? fallbackModel,
-        prompt: prompt,
-        videoURL: lastVideoURL
-      )
-    )
-    Haptics.success()
-    notifyVideoFinished(
-      success: true,
-      detail: "\(lastVideoModel ?? fallbackModel) finished in \(mediaElapsedSeconds)s"
-    )
-    await refreshPlaneBalanceOnly()
+    // prompt arg kept for call sites; history uses current videoPrompt in apply.
+    _ = prompt
+    try await applyVideoJobResult(job, fallbackModel: fallbackModel)
   }
 
   // MARK: - Speech (TTS)
@@ -2290,6 +2278,7 @@ final class AppState: ObservableObject {
     speechTask = nil
     speechBusy = false
     speechStatus = nil
+    clearPendingSpeechJob()
     speechError = PrismError.cancelled.userFacingMessage
   }
 
@@ -2366,31 +2355,49 @@ final class AppState: ObservableObject {
     }
     speechBusy = true
     speechError = nil
-    speechStatus = "Synthesizing \(model.model)…"
+    speechStatus = "Synthesizing \(model.model)… (Workflow; safe to background)"
     stopSpeechPlayback()
     lastSpeechData = nil
     defer { speechBusy = false }
     do {
       try Task.checkCancellation()
-      let res = try await controlPlane.generateSpeech(model: model.model, input: text)
+      let res = try await controlPlane.generateSpeech(
+        model: model.model,
+        input: text,
+        async: true
+      )
       try Task.checkCancellation()
-      guard let data = res.audioData else {
-        speechError = "No audio in response."
-        speechStatus = nil
-        return
+      if let id = res.id, res.audioData == nil {
+        try? secrets.set(id, for: SecretStoreKeys.pendingSpeechJobId)
+        try? secrets.set(model.model, for: SecretStoreKeys.pendingSpeechJobModel)
+        speechStatus = "Plane job \(id.prefix(12))… · will re-check when open"
+        try await finishSpeechJob(id: id, fallbackModel: model.model)
+      } else {
+        clearPendingSpeechJob()
+        guard let data = res.audioData else {
+          speechError = "No audio in response."
+          speechStatus = nil
+          return
+        }
+        lastSpeechData = data
+        lastSpeechFormat = res.format ?? "mp3"
+        lastSpeechModel = res.model ?? model.model
+        speechStatus = "Done · \(lastSpeechModel ?? model.model) · \(data.count / 1024) KB"
+        Haptics.success()
+        playLastSpeech()
+        await refreshPlaneBalanceOnly()
       }
-      lastSpeechData = data
-      lastSpeechFormat = res.format ?? "mp3"
-      lastSpeechModel = res.model ?? model.model
-      speechStatus = "Done · \(lastSpeechModel ?? model.model) · \(data.count / 1024) KB"
-      Haptics.success()
-      playLastSpeech()
-      await refreshPlaneBalanceOnly()
     } catch is CancellationError {
-      speechError = PrismError.cancelled.userFacingMessage
-      speechStatus = nil
-      Haptics.warning()
+      if (try? secrets.get(SecretStoreKeys.pendingSpeechJobId)) != nil {
+        speechStatus = "Paused (background). Will re-check when open…"
+        speechError = nil
+      } else {
+        speechError = PrismError.cancelled.userFacingMessage
+        speechStatus = nil
+        Haptics.warning()
+      }
     } catch {
+      clearPendingSpeechJob()
       speechError = prismUserFacingError(error)
       speechStatus = nil
       Haptics.error()
@@ -2778,22 +2785,17 @@ final class AppState: ObservableObject {
       let msg = job.error?.message ?? job.error?.code ?? "Music job failed"
       throw PrismError.serverError(msg)
     }
-    guard let audio = job.result?.audio, !audio.isEmpty else {
-      clearPendingMusicJob()
-      throw PrismError.serverError("Music job finished with no audio")
+    try await applyMusicJobResult(job, fallbackModel: fallbackModel)
+  }
+
+  private func finishSpeechJob(id: String, fallbackModel: String) async throws {
+    let job = try await controlPlane.waitForJob(id: id, pollInterval: 3, timeout: 180)
+    if !job.isSuccess {
+      clearPendingSpeechJob()
+      let msg = job.error?.message ?? job.error?.code ?? "Speech job failed"
+      throw PrismError.serverError(msg)
     }
-    clearPendingMusicJob()
-    lastMusicAudio = audio
-    lastMusicData = nil
-    lastMusicModel = job.result?.model ?? job.model ?? fallbackModel
-    let detail = "\(lastMusicModel ?? fallbackModel) · \(musicElapsedSeconds)s"
-    musicStatus = "Done · \(detail)"
-    Haptics.success()
-    notifyMusicFinished(success: true, detail: detail)
-    if lastMusicData == nil, let urlStr = lastMusicAudio {
-      Task { await self.prefetchMusicIfNeeded(urlString: urlStr) }
-    }
-    await refreshPlaneBalanceOnly()
+    try await applySpeechJobResult(job, fallbackModel: fallbackModel)
   }
 
   private func clearPendingMusicJob() {
@@ -2806,16 +2808,53 @@ final class AppState: ObservableObject {
     try? secrets.set(nil, for: SecretStoreKeys.pendingVideoJobModel)
   }
 
-  /// After unlock / foreground: pick up jobs whose local poll Task was suspended/cancelled.
-  private func resumePendingAsyncJobsIfNeeded() async {
-    if !musicBusy, let id = try? secrets.get(SecretStoreKeys.pendingMusicJobId), !id.isEmpty {
-      let model = (try? secrets.get(SecretStoreKeys.pendingMusicJobModel)) ?? "music"
+  /// Always re-query plane for any pending Workflow job.
+  /// Does **not** gate on `musicBusy` / `mediaBusy` / `speechBusy`: those stay true while a
+  /// suspended Task is stuck, which previously prevented resume after unlock.
+  func forceSyncPendingJobs() async {
+    if let id = try? secrets.get(SecretStoreKeys.pendingMusicJobId), !id.isEmpty {
+      await syncOnePendingMusicJob(id: id)
+    }
+    if let id = try? secrets.get(SecretStoreKeys.pendingVideoJobId), !id.isEmpty {
+      await syncOnePendingVideoJob(id: id)
+    }
+    if let id = try? secrets.get(SecretStoreKeys.pendingSpeechJobId), !id.isEmpty {
+      await syncOnePendingSpeechJob(id: id)
+    }
+  }
+
+  private func syncOnePendingMusicJob(id: String) async {
+    let model = (try? secrets.get(SecretStoreKeys.pendingMusicJobModel)) ?? "music"
+    do {
+      let job = try await controlPlane.getJob(id: id)
+      if job.isTerminal {
+        musicTask?.cancel()
+        musicBusy = true
+        beginMusicBackgroundWork()
+        startMusicTimer()
+        defer {
+          stopMusicTimer()
+          musicBusy = false
+          endMusicBackgroundWork()
+        }
+        if job.isSuccess {
+          try await applyMusicJobResult(job, fallbackModel: model)
+        } else {
+          clearPendingMusicJob()
+          musicError = job.error?.message ?? job.error?.code ?? "Music job failed"
+          musicStatus = "Failed"
+          Haptics.error()
+          notifyMusicFinished(success: false, detail: musicError ?? "Failed")
+        }
+        return
+      }
+      // Still running on plane: restart poll (old Task may be hung after suspend).
+      musicTask?.cancel()
       musicBusy = true
       musicError = nil
-      musicStatus = "Resuming plane job \(id.prefix(12))…"
+      musicStatus = "Plane job \(id.prefix(12))… · still running"
       beginMusicBackgroundWork()
       startMusicTimer()
-      musicTask?.cancel()
       musicTask = Task {
         defer {
           stopMusicTimer()
@@ -2825,7 +2864,7 @@ final class AppState: ObservableObject {
         do {
           try await finishMusicJob(id: id, fallbackModel: model)
         } catch is CancellationError {
-          musicStatus = "Paused (locked). Unlock to check plane job…"
+          musicStatus = "Paused (background). Will re-check when open…"
         } catch {
           clearPendingMusicJob()
           musicError = prismUserFacingError(error)
@@ -2834,15 +2873,43 @@ final class AppState: ObservableObject {
           notifyMusicFinished(success: false, detail: musicError ?? "Failed")
         }
       }
+    } catch {
+      // Network blip: keep pending id for next active.
+      musicStatus = "Plane job \(id.prefix(12))… · re-check pending"
     }
-    if !mediaBusy, let id = try? secrets.get(SecretStoreKeys.pendingVideoJobId), !id.isEmpty {
-      let model = (try? secrets.get(SecretStoreKeys.pendingVideoJobModel)) ?? "video"
+  }
+
+  private func syncOnePendingVideoJob(id: String) async {
+    let model = (try? secrets.get(SecretStoreKeys.pendingVideoJobModel)) ?? "video"
+    do {
+      let job = try await controlPlane.getJob(id: id)
+      if job.isTerminal {
+        mediaTask?.cancel()
+        mediaBusy = true
+        beginVideoBackgroundWork()
+        startMediaTimer()
+        defer {
+          stopMediaTimer()
+          mediaBusy = false
+          endVideoBackgroundWork()
+        }
+        if job.isSuccess {
+          try await applyVideoJobResult(job, fallbackModel: model)
+        } else {
+          clearPendingVideoJob()
+          mediaError = job.error?.message ?? job.error?.code ?? "Video job failed"
+          mediaStatus = "Failed"
+          Haptics.error()
+          notifyVideoFinished(success: false, detail: mediaError ?? "Failed")
+        }
+        return
+      }
+      mediaTask?.cancel()
       mediaBusy = true
       mediaError = nil
-      mediaStatus = "Resuming plane job \(id.prefix(12))…"
+      mediaStatus = "Plane job \(id.prefix(12))… · still running"
       beginVideoBackgroundWork()
       startMediaTimer()
-      mediaTask?.cancel()
       mediaTask = Task {
         defer {
           stopMediaTimer()
@@ -2852,7 +2919,7 @@ final class AppState: ObservableObject {
         do {
           try await finishVideoJob(id: id, fallbackModel: model)
         } catch is CancellationError {
-          mediaStatus = "Paused (locked). Unlock to check plane job…"
+          mediaStatus = "Paused (background). Will re-check when open…"
         } catch {
           clearPendingVideoJob()
           mediaError = prismUserFacingError(error)
@@ -2861,7 +2928,124 @@ final class AppState: ObservableObject {
           notifyVideoFinished(success: false, detail: mediaError ?? "Failed")
         }
       }
+    } catch {
+      mediaStatus = "Plane job \(id.prefix(12))… · re-check pending"
     }
+  }
+
+  private func syncOnePendingSpeechJob(id: String) async {
+    let model = (try? secrets.get(SecretStoreKeys.pendingSpeechJobModel)) ?? "speech"
+    do {
+      let job = try await controlPlane.getJob(id: id)
+      if job.isTerminal {
+        speechTask?.cancel()
+        speechBusy = true
+        defer { speechBusy = false }
+        if job.isSuccess {
+          try await applySpeechJobResult(job, fallbackModel: model)
+        } else {
+          clearPendingSpeechJob()
+          speechError = job.error?.message ?? job.error?.code ?? "Speech job failed"
+          speechStatus = "Failed"
+          Haptics.error()
+        }
+        return
+      }
+      speechTask?.cancel()
+      speechBusy = true
+      speechError = nil
+      speechStatus = "Plane job \(id.prefix(12))… · still running"
+      speechTask = Task {
+        defer { speechBusy = false }
+        do {
+          try await finishSpeechJob(id: id, fallbackModel: model)
+        } catch is CancellationError {
+          speechStatus = "Paused (background). Will re-check when open…"
+        } catch {
+          clearPendingSpeechJob()
+          speechError = prismUserFacingError(error)
+          speechStatus = "Failed"
+          Haptics.error()
+        }
+      }
+    } catch {
+      speechStatus = "Plane job \(id.prefix(12))… · re-check pending"
+    }
+  }
+
+  private func applyMusicJobResult(_ job: AsyncJobResponse, fallbackModel: String) async throws {
+    guard let audio = job.result?.audio, !audio.isEmpty else {
+      clearPendingMusicJob()
+      throw PrismError.serverError("Music job finished with no audio")
+    }
+    clearPendingMusicJob()
+    lastMusicAudio = audio
+    lastMusicData = nil
+    lastMusicModel = job.result?.model ?? job.model ?? fallbackModel
+    let detail = "\(lastMusicModel ?? fallbackModel) · \(musicElapsedSeconds)s"
+    musicStatus = "Done · \(detail)"
+    musicError = nil
+    Haptics.success()
+    notifyMusicFinished(success: true, detail: detail)
+    if lastMusicData == nil, let urlStr = lastMusicAudio {
+      Task { await self.prefetchMusicIfNeeded(urlString: urlStr) }
+    }
+    await refreshPlaneBalanceOnly()
+  }
+
+  private func applyVideoJobResult(_ job: AsyncJobResponse, fallbackModel: String) async throws {
+    guard let v = job.result?.video, !v.isEmpty else {
+      clearPendingVideoJob()
+      throw PrismError.serverError("Video job finished with no URL")
+    }
+    clearPendingVideoJob()
+    lastVideoModel = job.result?.model ?? job.model ?? fallbackModel
+    lastVideoURL = await Self.waitUntilMediaReachable(v) ?? v
+    mediaStatus = "Done · \(lastVideoModel ?? fallbackModel) · \(mediaElapsedSeconds)s"
+    mediaError = nil
+    pushMediaHistory(
+      MediaHistoryItem(
+        kind: .video,
+        model: lastVideoModel ?? fallbackModel,
+        prompt: videoPrompt,
+        videoURL: lastVideoURL
+      )
+    )
+    Haptics.success()
+    notifyVideoFinished(
+      success: true,
+      detail: "\(lastVideoModel ?? fallbackModel) finished in \(mediaElapsedSeconds)s"
+    )
+    await refreshPlaneBalanceOnly()
+  }
+
+  private func applySpeechJobResult(_ job: AsyncJobResponse, fallbackModel: String) async throws {
+    guard let audioURL = job.result?.audio, !audioURL.isEmpty else {
+      clearPendingSpeechJob()
+      throw PrismError.serverError("Speech job finished with no audio")
+    }
+    clearPendingSpeechJob()
+    // Download signed media URL into lastSpeechData for AVAudioPlayer.
+    if let url = URL(string: audioURL),
+       let (data, _) = try? await URLSession.shared.data(from: url),
+       !data.isEmpty
+    {
+      lastSpeechData = data
+    } else {
+      throw PrismError.serverError("Could not download speech audio")
+    }
+    lastSpeechFormat = job.result?.format ?? "mp3"
+    lastSpeechModel = job.result?.model ?? job.model ?? fallbackModel
+    speechStatus = "Done · \(lastSpeechModel ?? fallbackModel) · \((lastSpeechData?.count ?? 0) / 1024) KB"
+    speechError = nil
+    Haptics.success()
+    playLastSpeech()
+    await refreshPlaneBalanceOnly()
+  }
+
+  private func clearPendingSpeechJob() {
+    try? secrets.set(nil, for: SecretStoreKeys.pendingSpeechJobId)
+    try? secrets.set(nil, for: SecretStoreKeys.pendingSpeechJobModel)
   }
 
   func refreshPlaneBalanceOnly() async {
