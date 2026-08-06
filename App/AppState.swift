@@ -2,16 +2,19 @@ import Foundation
 import Network
 import PrismKit
 import SwiftUI
+#if canImport(AVFoundation)
+import AVFoundation
+#endif
 #if canImport(UIKit)
 import UIKit
 #endif
 
-/// In-memory chat turn for the shell UI.
+/// One chat turn for the shell UI (also persisted in multi-session storage).
 ///
 /// Context is **client-side**: every send rebuilds the OpenAI message list from
 /// `turns` (plane) or reuses `conversationId` (playground). Switching
 /// `selectedModelId` never clears turns -- same chat, next model.
-struct ChatTurn: Identifiable, Equatable {
+struct ChatTurn: Identifiable, Equatable, Codable {
   let id: UUID
   let role: Role
   var text: String
@@ -19,7 +22,7 @@ struct ChatTurn: Identifiable, Equatable {
   var modelId: String?
   var modelLabel: String?
 
-  enum Role: String, Equatable {
+  enum Role: String, Equatable, Codable {
     case user
     case assistant
     case system
@@ -37,6 +40,43 @@ struct ChatTurn: Identifiable, Equatable {
     self.text = text
     self.modelId = modelId
     self.modelLabel = modelLabel
+  }
+}
+
+/// One saved conversation (local multi-session list).
+struct ChatSession: Identifiable, Equatable, Codable {
+  let id: UUID
+  var title: String
+  var turns: [ChatTurn]
+  var conversationId: String?
+  var selectedModelId: String?
+  var createdAt: Date
+  var updatedAt: Date
+
+  init(
+    id: UUID = UUID(),
+    title: String = "New chat",
+    turns: [ChatTurn] = [],
+    conversationId: String? = nil,
+    selectedModelId: String? = nil,
+    createdAt: Date = Date(),
+    updatedAt: Date = Date()
+  ) {
+    self.id = id
+    self.title = title
+    self.turns = turns
+    self.conversationId = conversationId
+    self.selectedModelId = selectedModelId
+    self.createdAt = createdAt
+    self.updatedAt = updatedAt
+  }
+
+  static func makeTitle(from turns: [ChatTurn]) -> String {
+    guard let first = turns.first(where: { $0.role == .user }) else { return "New chat" }
+    let t = first.text.trimmingCharacters(in: .whitespacesAndNewlines)
+    if t.isEmpty { return "New chat" }
+    if t.count <= 48 { return t }
+    return String(t.prefix(45)) + "..."
   }
 }
 
@@ -128,6 +168,7 @@ final class AppState: ObservableObject {
   @Published var selectedModelId: String?
   @Published var selectedImageModelId: String?
   @Published var selectedVideoModelId: String?
+  @Published var selectedSpeechModelId: String?
   @Published var authMode: String?
 
   // MARK: - Chat
@@ -136,8 +177,11 @@ final class AppState: ObservableObject {
   @Published var draft: String = ""
   @Published var conversationId: String?
   @Published var useStream: Bool = true
+  /// Saved conversations (newest first). Active transcript is `turns`.
+  @Published var sessions: [ChatSession] = []
+  @Published var currentSessionId: UUID?
 
-  // MARK: - Image / video (control plane)
+  // MARK: - Image / video / speech (control plane)
 
   @Published var imagePrompt: String = ""
   /// Optional reference image (https or data:) for i2i / edit models.
@@ -157,6 +201,14 @@ final class AppState: ObservableObject {
   @Published var mediaElapsedSeconds: Int = 0
   /// Last N image/video results in this session (newest first). Cap 20.
   @Published var mediaHistory: [MediaHistoryItem] = []
+  /// TTS input text.
+  @Published var speechText: String = ""
+  @Published var lastSpeechData: Data?
+  @Published var lastSpeechFormat: String = "mp3"
+  @Published var lastSpeechModel: String?
+  @Published var speechBusy: Bool = false
+  @Published var speechError: String?
+  @Published var speechStatus: String?
   /// Last user text that failed (for Retry).
   @Published private(set) var lastFailedChatText: String?
   @Published private(set) var canRetryLastChat: Bool = false
@@ -197,9 +249,14 @@ final class AppState: ObservableObject {
   private var controlPlane: ControlPlaneClient
   private var chatTask: Task<Void, Never>?
   private var mediaTask: Task<Void, Never>?
+  private var speechTask: Task<Void, Never>?
   private var mediaTimerTask: Task<Void, Never>?
   private var pathMonitor: NWPathMonitor?
+  #if canImport(AVFoundation) && os(iOS)
+  private var speechPlayer: AVAudioPlayer?
+  #endif
   private static let mediaHistoryCap = 20
+  private static let sessionCap = 50
 
   /// Empty-state chips; tapping fills the draft (user can edit before send).
   static let starterPrompts: [String] = [
@@ -215,6 +272,7 @@ final class AppState: ObservableObject {
     playground = PrismClient(baseURL: PrismClient.playBaseURL)
     controlPlane = ControlPlaneClient()
     loadPersisted()
+    loadSessionsFromDisk()
     rebuildClients(clearSession: false)
     startNetworkMonitor()
   }
@@ -290,11 +348,33 @@ final class AppState: ObservableObject {
       }
   }
 
+  var speechModels: [ModelEntry] {
+    models
+      .filter { ($0.type ?? "") == "tts" }
+      .filter(appliesSpendableFilter)
+      .filter(matchesSearch)
+      .sorted { ($0.label ?? $0.model) < ($1.label ?? $1.model) }
+  }
+
   /// All chat models ignoring search filter (selection must survive search/filter).
   var allChatModels: [ModelEntry] {
     models
       .filter { ($0.type ?? "chat") == "chat" }
       .filter(appliesSpendableFilter)
+  }
+
+  var selectedSpeechModel: ModelEntry? {
+    if let id = selectedSpeechModelId, let m = speechModels.first(where: { $0.model == id }) {
+      return m
+    }
+    return speechModels.first
+  }
+
+  var speechSpendPreview: String? { spendPreview(for: selectedSpeechModel) }
+
+  func selectSpeechModel(_ modelId: String) {
+    selectedSpeechModelId = modelId.isEmpty ? nil : modelId
+    persistUIPrefs()
   }
 
   /// Resolve the selected chat model from the **full** chat catalog, not the search-filtered list.
@@ -603,6 +683,9 @@ final class AppState: ObservableObject {
     if let m = try? secrets.get(SecretStoreKeys.selectedVideoModel), !m.isEmpty {
       selectedVideoModelId = m
     }
+    if let m = try? secrets.get(SecretStoreKeys.selectedSpeechModel), !m.isEmpty {
+      selectedSpeechModelId = m
+    }
     if let s = try? secrets.get(SecretStoreKeys.useStream) {
       useStream = (s == "1" || s == "true")
     }
@@ -622,8 +705,146 @@ final class AppState: ObservableObject {
     try? secrets.set(selectedModelId, for: SecretStoreKeys.selectedChatModel)
     try? secrets.set(selectedImageModelId, for: SecretStoreKeys.selectedImageModel)
     try? secrets.set(selectedVideoModelId, for: SecretStoreKeys.selectedVideoModel)
+    try? secrets.set(selectedSpeechModelId, for: SecretStoreKeys.selectedSpeechModel)
     try? secrets.set(useStream ? "1" : "0", for: SecretStoreKeys.useStream)
     try? secrets.set(hideUnspendable ? "1" : "0", for: SecretStoreKeys.hideUnspendable)
+  }
+
+  // MARK: - Multi-session chat
+
+  private var sessionsFileURL: URL {
+    let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+      ?? FileManager.default.temporaryDirectory
+    let dir = base.appendingPathComponent("org.skyphusion.prism", isDirectory: true)
+    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    return dir.appendingPathComponent("chat-sessions.json")
+  }
+
+  private struct SessionsPayload: Codable {
+    var sessions: [ChatSession]
+    var currentId: UUID?
+  }
+
+  private func loadSessionsFromDisk() {
+    let url = sessionsFileURL
+    guard let data = try? Data(contentsOf: url),
+          let payload = try? JSONDecoder().decode(SessionsPayload.self, from: data)
+    else {
+      ensureActiveSession()
+      return
+    }
+    sessions = payload.sessions.sorted { $0.updatedAt > $1.updatedAt }
+    if let id = payload.currentId, sessions.contains(where: { $0.id == id }) {
+      currentSessionId = id
+      if let s = sessions.first(where: { $0.id == id }) {
+        turns = s.turns
+        conversationId = s.conversationId
+        if let mid = s.selectedModelId { selectedModelId = mid }
+      }
+    } else {
+      ensureActiveSession()
+    }
+  }
+
+  private func saveSessionsToDisk() {
+    let payload = SessionsPayload(sessions: sessions, currentId: currentSessionId)
+    guard let data = try? JSONEncoder().encode(payload) else { return }
+    try? data.write(to: sessionsFileURL, options: .atomic)
+  }
+
+  /// Keep an active session id; create empty one if list is empty.
+  private func ensureActiveSession() {
+    if let id = currentSessionId, sessions.contains(where: { $0.id == id }) { return }
+    if let first = sessions.first {
+      currentSessionId = first.id
+      turns = first.turns
+      conversationId = first.conversationId
+      return
+    }
+    let s = ChatSession(selectedModelId: selectedModelId)
+    sessions = [s]
+    currentSessionId = s.id
+    turns = []
+    conversationId = nil
+    saveSessionsToDisk()
+  }
+
+  /// Write current transcript into `sessions` and disk.
+  func persistCurrentSession() {
+    guard let id = currentSessionId else {
+      if !turns.isEmpty {
+        let s = ChatSession(
+          title: ChatSession.makeTitle(from: turns),
+          turns: turns,
+          conversationId: conversationId,
+          selectedModelId: selectedModelId
+        )
+        sessions.insert(s, at: 0)
+        currentSessionId = s.id
+        trimSessions()
+        saveSessionsToDisk()
+      }
+      return
+    }
+    if let i = sessions.firstIndex(where: { $0.id == id }) {
+      sessions[i].turns = turns
+      sessions[i].conversationId = conversationId
+      sessions[i].selectedModelId = selectedModelId
+      sessions[i].title = ChatSession.makeTitle(from: turns)
+      sessions[i].updatedAt = Date()
+      // Move to front when activity happens.
+      if i != 0 {
+        let s = sessions.remove(at: i)
+        sessions.insert(s, at: 0)
+      }
+    }
+    trimSessions()
+    saveSessionsToDisk()
+  }
+
+  private func trimSessions() {
+    if sessions.count > Self.sessionCap {
+      sessions = Array(sessions.prefix(Self.sessionCap))
+    }
+  }
+
+  func openSession(_ id: UUID) {
+    guard id != currentSessionId else { return }
+    persistCurrentSession()
+    guard let s = sessions.first(where: { $0.id == id }) else { return }
+    currentSessionId = id
+    turns = s.turns
+    conversationId = s.conversationId
+    if let mid = s.selectedModelId {
+      selectedModelId = mid
+      persistUIPrefs()
+    }
+    errorMessage = nil
+    clearChatFailure()
+    cancelChat()
+    saveSessionsToDisk()
+  }
+
+  func deleteSession(_ id: UUID) {
+    sessions.removeAll { $0.id == id }
+    if currentSessionId == id {
+      cancelChat()
+      if let next = sessions.first {
+        currentSessionId = next.id
+        turns = next.turns
+        conversationId = next.conversationId
+      } else {
+        let s = ChatSession(selectedModelId: selectedModelId)
+        sessions = [s]
+        currentSessionId = s.id
+        turns = []
+        conversationId = nil
+      }
+      clearChatFailure()
+      errorMessage = nil
+    }
+    saveSessionsToDisk()
+    Haptics.light()
   }
 
   func setShowDeveloperSettings(_ on: Bool) {
@@ -777,6 +998,11 @@ final class AppState: ObservableObject {
           !$0.model.hasPrefix("minimax/hailuo") && !$0.model.hasPrefix("xai/grok-imagine-video")
         })?.model
         ?? videoModels.first?.model
+    }
+    if selectedSpeechModelId == nil || !speechModels.contains(where: { $0.model == selectedSpeechModelId }) {
+      selectedSpeechModelId = speechModels.first(where: { $0.model.contains("aura-2-en") })?.model
+        ?? speechModels.first(where: { $0.model.contains("melotts") })?.model
+        ?? speechModels.first?.model
     }
     persistUIPrefs()
   }
@@ -1016,17 +1242,20 @@ final class AppState: ObservableObject {
         try await sendPlane(model: model, assistantId: assistantId)
       }
       clearChatFailure()
+      persistCurrentSession()
       Haptics.success()
     } catch is CancellationError {
       updateAssistant(id: assistantId, text: "(cancelled)")
       errorMessage = PrismError.cancelled.userFacingMessage
       recordChatFailure(userText: text)
+      persistCurrentSession()
       Haptics.warning()
     } catch {
       let msg = prismUserFacingError(error)
       updateAssistant(id: assistantId, text: "(error) \(msg)")
       errorMessage = msg
       recordChatFailure(userText: text)
+      persistCurrentSession()
       Haptics.error()
     }
   }
@@ -1124,13 +1353,26 @@ final class AppState: ObservableObject {
     turns[i].text = text
   }
 
-  /// New conversation: clear turns and conversation id.
+  /// New conversation: save the current session, open a blank one.
   func newChat() {
     cancelChat()
+    persistCurrentSession()
+    // Drop empty "New chat" shells so the list does not fill with blanks.
+    if let id = currentSessionId,
+       let i = sessions.firstIndex(where: { $0.id == id }),
+       sessions[i].turns.isEmpty
+    {
+      sessions.remove(at: i)
+    }
+    let s = ChatSession(selectedModelId: selectedModelId)
+    sessions.insert(s, at: 0)
+    currentSessionId = s.id
     turns = []
     conversationId = nil
     errorMessage = nil
     clearChatFailure()
+    trimSessions()
+    saveSessionsToDisk()
   }
 
   func clearChat() { newChat() }
@@ -1314,6 +1556,97 @@ final class AppState: ObservableObject {
     } catch {
       mediaError = prismUserFacingError(error)
       mediaStatus = "Failed after \(mediaElapsedSeconds)s · prompt kept for Retry"
+      Haptics.error()
+    }
+  }
+
+  // MARK: - Speech (TTS)
+
+  func generateSpeech() {
+    speechTask?.cancel()
+    speechTask = Task { await self.performGenerateSpeech() }
+  }
+
+  func cancelSpeech() {
+    speechTask?.cancel()
+    speechTask = nil
+    speechBusy = false
+    speechStatus = nil
+    speechError = PrismError.cancelled.userFacingMessage
+  }
+
+  /// Fill speech field from a chat turn and synthesize.
+  func speakText(_ text: String) {
+    let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !t.isEmpty else { return }
+    speechText = t
+    generateSpeech()
+  }
+
+  func playLastSpeech() {
+    guard let data = lastSpeechData else { return }
+    #if canImport(AVFoundation) && os(iOS)
+    do {
+      try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+      try AVAudioSession.sharedInstance().setActive(true)
+      speechPlayer = try AVAudioPlayer(data: data)
+      speechPlayer?.prepareToPlay()
+      speechPlayer?.play()
+      Haptics.light()
+    } catch {
+      speechError = "Could not play audio: \(error.localizedDescription)"
+      Haptics.error()
+    }
+    #endif
+  }
+
+  private func performGenerateSpeech() async {
+    guard canUseMediaDoors else {
+      speechError = "Control plane + device key required for speech."
+      return
+    }
+    if !isNetworkSatisfied {
+      speechError = "No network connection. Reconnect and try again."
+      Haptics.error()
+      return
+    }
+    let text = speechText.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !text.isEmpty else {
+      speechError = "Enter text to speak."
+      return
+    }
+    guard let model = selectedSpeechModel else {
+      speechError = "Pick a speech model."
+      return
+    }
+    speechBusy = true
+    speechError = nil
+    speechStatus = "Synthesizing \(model.model)…"
+    lastSpeechData = nil
+    defer { speechBusy = false }
+    do {
+      try Task.checkCancellation()
+      let res = try await controlPlane.generateSpeech(model: model.model, input: text)
+      try Task.checkCancellation()
+      guard let data = res.audioData else {
+        speechError = "No audio in response."
+        speechStatus = nil
+        return
+      }
+      lastSpeechData = data
+      lastSpeechFormat = res.format ?? "mp3"
+      lastSpeechModel = res.model ?? model.model
+      speechStatus = "Done · \(lastSpeechModel ?? model.model) · \(data.count / 1024) KB"
+      Haptics.success()
+      playLastSpeech()
+      await refreshPlaneBalanceOnly()
+    } catch is CancellationError {
+      speechError = PrismError.cancelled.userFacingMessage
+      speechStatus = nil
+      Haptics.warning()
+    } catch {
+      speechError = prismUserFacingError(error)
+      speechStatus = nil
       Haptics.error()
     }
   }

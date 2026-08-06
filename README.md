@@ -50,9 +50,8 @@ CI runs package tests on Ubuntu. The iOS app is built with Xcode locally (not in
 
 ## Status
 
-- Kit **0.6.4**: regenerate last reply (plane); offline banner; paste enroll/token; starter prompts;
-  clear media refs; confirm clear device key. Prior: persist prefs; stream UX; share; About; icon;
-  health/haptics; StoreKit redeem; spend preview; media history.
+- Kit **0.7.0**: Speech tab (`POST /v1/audio/speech`); multi-session chat list (local, max 50);
+  Speak from assistant bubble. Prior: regenerate; offline; paste enroll; persist prefs; StoreKit.
 - App Store Connect: app `6798391677`, three consumable credit IAPs. See `docs/TESTFLIGHT.md`,
   `docs/ASC-CHECKLIST.md`.
 

@@ -223,6 +223,29 @@ public final class ControlPlaneClient: @unchecked Sendable {
     try await generateVideo(VideoGenerationRequest(model: model, prompt: prompt, image: image))
   }
 
+  /// `POST /v1/audio/speech` -- metered TTS; returns base64 audio (mp3 by default).
+  public func generateSpeech(_ body: SpeechGenerationRequest) async throws -> SpeechGenerationResponse {
+    let key = try requireKey()
+    let res: SpeechGenerationResponse = try await http.sendJSON(
+      method: "POST",
+      path: "/v1/audio/speech",
+      body: body,
+      bearer: key,
+      timeout: Self.nonChatTimeout
+    )
+    if let err = res.error {
+      throw PrismError.serverError(err.message ?? err.code ?? "speech generation error")
+    }
+    guard res.audioData != nil else {
+      throw PrismError.serverError("Empty speech audio payload")
+    }
+    return res
+  }
+
+  public func generateSpeech(model: String, input: String) async throws -> SpeechGenerationResponse {
+    try await generateSpeech(SpeechGenerationRequest(model: model, input: input))
+  }
+
   // MARK: - Store
 
   /// Apply a StoreKit 2 signed transaction as prepaid credit (`POST /v1/store/redeem`).

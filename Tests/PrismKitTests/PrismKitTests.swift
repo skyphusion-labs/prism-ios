@@ -9,7 +9,16 @@ import FoundationNetworking
 final class PrismKitTests: XCTestCase {
   func testHealthString() {
     XCTAssertEqual(PrismKit.health(), "ok:PrismKit")
-    XCTAssertEqual(PrismKit.version, "0.6.4")
+    XCTAssertEqual(PrismKit.version, "0.7.0")
+  }
+
+  func testSpeechGenerationResponseDecode() throws {
+    let b64 = Data("hello-audio".utf8).base64EncodedString()
+    let json = #"{"model":"@cf/deepgram/aura-2-en","audio_base64":"\#(b64)","format":"mp3"}"#.data(using: .utf8)!
+    let res = try JSONDecoder().decode(SpeechGenerationResponse.self, from: json)
+    XCTAssertEqual(res.model, "@cf/deepgram/aura-2-en")
+    XCTAssertEqual(res.format, "mp3")
+    XCTAssertEqual(res.audioData, Data("hello-audio".utf8))
   }
 
   func testSessionCookieExportRestore() throws {

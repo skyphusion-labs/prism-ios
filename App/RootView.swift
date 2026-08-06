@@ -15,7 +15,7 @@ struct RootView: View {
       } else if state.needsPlaneEnroll {
         OnboardingView()
       } else if state.backend == .controlPlane {
-        // Plane: chat + image + video doors
+        // Plane: chat + image + video + speech doors
         TabView {
           NavigationStack {
             ChatView()
@@ -35,6 +35,12 @@ struct RootView: View {
               .toolbar { settingsLink }
           }
           .tabItem { Label("Video", systemImage: "film") }
+
+          NavigationStack {
+            SpeechGenerateView()
+              .toolbar { settingsLink }
+          }
+          .tabItem { Label("Speech", systemImage: "waveform") }
         }
       } else {
         NavigationStack {
