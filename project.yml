@@ -32,8 +32,8 @@ targets:
           - Legal/**
     resources:
       - path: App/Assets.xcassets
-      # Bundled for in-app AGPL license display (Settings → License).
-      - path: App/Legal
+      # LICENSE text is compiled into BundledLegalText.swift (XcodeGen was not
+      # copying bare legal files into the Resources phase on this project).
     dependencies:
       - package: PrismKitLocal
         product: PrismKit

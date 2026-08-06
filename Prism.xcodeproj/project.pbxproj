@@ -25,6 +25,7 @@
 		911682D8AFBAB551FD3AEA8E /* PrismWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 8A0D770899DE58CF9B021732 /* PrismWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		92413ACF4D481B527D0488B0 /* PrismWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEB11428DB56B9C2AC9B1168 /* PrismWidget.swift */; };
 		A6E821D417A39F86FEE743D3 /* AudioRecorder.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF2A06FA03AA3BC3922B359C /* AudioRecorder.swift */; };
+		B185EA2CCD58D2180051682E /* BundledLegalText.swift in Sources */ = {isa = PBXBuildFile; fileRef = BD8D043C7F09299F5FD7D77C /* BundledLegalText.swift */; };
 		B234AD32F35A92438A504CBA /* LicenseView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E6828C631CAB007C4EDED21 /* LicenseView.swift */; };
 		B9DEEA98E63BEE7F2FC9A6EE /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E02BE541FF59B758F2AECB0 /* SettingsView.swift */; };
 		C6F007D55BBA410ABB9E2DF1 /* PrismApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4115D7B498B51A37C0C1059 /* PrismApp.swift */; };
@@ -82,6 +83,7 @@
 		94567EB75BC9121E95247AB1 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginView.swift; sourceTree = "<group>"; };
 		AF2A06FA03AA3BC3922B359C /* AudioRecorder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorder.swift; sourceTree = "<group>"; };
 		B380EA7A1F0D104D733EB197 /* MediaGenerateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaGenerateView.swift; sourceTree = "<group>"; };
+		BD8D043C7F09299F5FD7D77C /* BundledLegalText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BundledLegalText.swift; sourceTree = "<group>"; };
 		BF2166C757BF46326F065EC8 /* MoreHubView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoreHubView.swift; sourceTree = "<group>"; };
 		C4115D7B498B51A37C0C1059 /* PrismApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PrismApp.swift; sourceTree = "<group>"; };
 		C53EA09CC97931EB498F64DB /* Prism.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Prism.entitlements; sourceTree = "<group>"; };
@@ -131,6 +133,7 @@
 				20325D4A56CE1D2FAD548CC0 /* Assets.xcassets */,
 				AF2A06FA03AA3BC3922B359C /* AudioRecorder.swift */,
 				37FA2272002A85BFCC9ACA06 /* BiometricLock.swift */,
+				BD8D043C7F09299F5FD7D77C /* BundledLegalText.swift */,
 				F65D9A85386E8EFA1A6D0C70 /* ChatView.swift */,
 				0044568A64445857E24FD409 /* EnrollView.swift */,
 				38DDFCFF6BA022D56B751299 /* Haptics.swift */,
@@ -276,6 +279,7 @@
 				61C14F92F5E19AD247115B66 /* AppState.swift in Sources */,
 				A6E821D417A39F86FEE743D3 /* AudioRecorder.swift in Sources */,
 				6ABE2964DB4D5B87E7C858F1 /* BiometricLock.swift in Sources */,
+				B185EA2CCD58D2180051682E /* BundledLegalText.swift in Sources */,
 				8C3819507DE7FD87AA8679F9 /* ChatView.swift in Sources */,
 				898BA0DED59FDABB75D032A7 /* EnrollView.swift in Sources */,
 				D7AF72B123245E304C361EC1 /* Haptics.swift in Sources */,
