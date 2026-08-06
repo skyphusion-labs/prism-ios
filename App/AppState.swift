@@ -2409,46 +2409,87 @@ final class AppState: ObservableObject {
     #endif
   }
 
-  /// Open remote music URL in Safari (Form `Link` is unreliable on some iOS builds).
-  @discardableResult
-  func openLastMusicURL() -> Bool {
-    guard let urlStr = lastMusicAudio,
-          let url = Self.musicPlaybackURL(from: urlStr)
-    else {
-      musicError = "No audio URL on this result."
-      Haptics.warning()
-      return false
-    }
-    #if canImport(UIKit)
-    UIApplication.shared.open(url, options: [:]) { ok in
-      Task { @MainActor in
-        if !ok {
-          self.musicError = "Could not open audio URL. Use Share instead."
-          Haptics.error()
-        } else {
-          Haptics.light()
-        }
-      }
-    }
-    return true
-    #else
-    return false
-    #endif
+  /// Resolved https URL for the last music result (plane rehost or provider).
+  var lastMusicPlaybackURL: URL? {
+    guard let urlStr = lastMusicAudio else { return nil }
+    return Self.musicPlaybackURL(from: urlStr)
   }
 
-  /// Parse MiniMax / CF signed URLs (percent-encoded query stays intact).
+  /// Local file if we already saved/prefetched this result into Application Support.
+  @Published var lastMusicLocalURL: URL?
+
+  /// Directory for user-visible music saves (Application Support/Prism/Music).
+  func musicLibraryDirectory() -> URL {
+    let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+      ?? FileManager.default.temporaryDirectory
+    let dir = base.appendingPathComponent("Prism/Music", isDirectory: true)
+    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    return dir
+  }
+
+  /// Download remote audio (or write inline bytes) into Prism/Music and set lastMusicLocalURL.
+  @discardableResult
+  func saveLastMusicToLibrary() async -> URL? {
+    musicError = nil
+    if let data = lastMusicData, !data.isEmpty {
+      return writeMusicDataToLibrary(data)
+    }
+    guard let remote = lastMusicPlaybackURL else {
+      musicError = "No audio to save."
+      Haptics.warning()
+      return nil
+    }
+    do {
+      let (data, _) = try await URLSession.shared.data(from: remote)
+      guard !data.isEmpty else {
+        musicError = "Empty audio download."
+        Haptics.error()
+        return nil
+      }
+      lastMusicData = data
+      return writeMusicDataToLibrary(data)
+    } catch {
+      musicError = "Could not download audio: \(error.localizedDescription)"
+      Haptics.error()
+      return nil
+    }
+  }
+
+  private func writeMusicDataToLibrary(_ data: Data) -> URL? {
+    let name = "prism-music-\(Int(Date().timeIntervalSince1970)).mp3"
+    let url = musicLibraryDirectory().appendingPathComponent(name)
+    do {
+      try data.write(to: url, options: .atomic)
+      lastMusicLocalURL = url
+      musicStatus = "Saved · \(name)"
+      Haptics.success()
+      return url
+    } catch {
+      musicError = "Could not save audio: \(error.localizedDescription)"
+      Haptics.error()
+      return nil
+    }
+  }
+
+  /// Prefetch plane/provider audio into memory so Play/Save work offline for a while.
+  private func prefetchMusicIfNeeded(urlString: String) async {
+    guard lastMusicData == nil,
+          let url = Self.musicPlaybackURL(from: urlString)
+    else { return }
+    // Only auto-prefetch our play-proxy media URLs (stable, ours). Skip flaky third-party OSS.
+    guard url.host?.contains("play-proxy") == true || url.path.contains("/v1/media/") else {
+      return
+    }
+    if let (data, _) = try? await URLSession.shared.data(from: url), !data.isEmpty {
+      lastMusicData = data
+    }
+  }
+
+  /// Parse play-proxy or provider URLs (percent-encoded path stays intact).
   private static func musicPlaybackURL(from raw: String) -> URL? {
     let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return nil }
     if let u = URL(string: trimmed), let scheme = u.scheme?.lowercased(),
-       scheme == "http" || scheme == "https"
-    {
-      return u
-    }
-    // Fallback for partially encoded hosts.
-    if let encoded = trimmed.addingPercentEncoding(withAllowedCharacters: .urlFragmentAllowed),
-       let u = URL(string: encoded),
-       let scheme = u.scheme?.lowercased(),
        scheme == "http" || scheme == "https"
     {
       return u
@@ -2480,6 +2521,7 @@ final class AppState: ObservableObject {
     musicStatus = "Generating \(model.model)…"
     lastMusicAudio = nil
     lastMusicData = nil
+    lastMusicLocalURL = nil
     startMusicTimer()
     defer {
       stopMusicTimer()
@@ -2499,8 +2541,10 @@ final class AppState: ObservableObject {
       lastMusicModel = res.model ?? model.model
       musicStatus = "Done · \(lastMusicModel ?? model.model) · \(musicElapsedSeconds)s"
       Haptics.success()
-      // Auto-play: bytes in-app, or stream remote URL.
-      playLastMusic()
+      // Do not auto-play (user controls Play). Optionally cache remote audio for Save.
+      if lastMusicData == nil, let urlStr = lastMusicAudio {
+        Task { await self.prefetchMusicIfNeeded(urlString: urlStr) }
+      }
       await refreshPlaneBalanceOnly()
     } catch is CancellationError {
       musicError = PrismError.cancelled.userFacingMessage
