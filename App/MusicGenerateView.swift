@@ -100,9 +100,8 @@ struct MusicGenerateView: View {
         } footer: {
           Text(
             "Unit-priced per request. Full tracks often take 2-4 minutes (up to ~5 with lyrics). "
-              + "Switching tabs inside Prism is fine; the screen stays on while generating. "
-              + "Locking the phone or leaving the app can cancel the run (iOS kills long waits). "
-              + "A notification fires if it finishes while you are still in Prism."
+              + "Generation runs as a plane job you can lock over; Prism polls until ready. "
+              + "A notification fires when done if the app is still alive."
           )
         }
 

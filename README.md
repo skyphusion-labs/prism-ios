@@ -50,8 +50,8 @@ CI runs package tests on Ubuntu. The iOS app is built with Xcode locally (not in
 
 ## Status
 
-- Kit **0.8.5** (build 20): long gens keep the screen awake + best-effort background transfer;
-  honest copy (lock may still cancel multi-minute waits); Play/Stop music/TTS. Prior **0.8.4**.
+- Kit **0.8.6** (build 21): async plane jobs for video/music (lock-safe poll), Grok media
+  Range-ready playback. Prior **0.8.5**: screen-awake + honest copy.
 - App Store Connect: app `6798391677`, three consumable credit IAPs. See `docs/TESTFLIGHT.md`,
   `docs/ASC-CHECKLIST.md`.
 
