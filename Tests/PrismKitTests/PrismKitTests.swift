@@ -9,7 +9,20 @@ import FoundationNetworking
 final class PrismKitTests: XCTestCase {
   func testHealthString() {
     XCTAssertEqual(PrismKit.health(), "ok:PrismKit")
-    XCTAssertEqual(PrismKit.version, "0.7.1")
+    XCTAssertEqual(PrismKit.version, "0.8.0")
+  }
+
+  func testTranscriptionResponseDecode() throws {
+    let json = #"{"model":"@cf/openai/whisper-large-v3-turbo","text":"hello world"}"#.data(using: .utf8)!
+    let res = try JSONDecoder().decode(TranscriptionResponse.self, from: json)
+    XCTAssertEqual(res.text, "hello world")
+  }
+
+  func testMusicGenerationResponseDecode() throws {
+    let json = #"{"model":"minimax/music-2.6","audio":"https://cdn.example/m.mp3"}"#.data(using: .utf8)!
+    let res = try JSONDecoder().decode(MusicGenerationResponse.self, from: json)
+    XCTAssertEqual(res.audioURL, "https://cdn.example/m.mp3")
+    XCTAssertNil(res.audioData)
   }
 
   func testConversationCompactSplitAndNormalize() {

@@ -50,8 +50,8 @@ CI runs package tests on Ubuntu. The iOS app is built with Xcode locally (not in
 
 ## Status
 
-- Kit **0.7.1**: Conversation **compact** (playground API + plane client-side summary); keep UI
-  transcript full. Prior 0.7.0: Speech tab; multi-session list; Speak from assistant bubble.
+- Kit **0.8.0**: **Audio** tab (TTS Speak + STT Transcribe with mic/import); **Music** tab;
+  prior: compact, multi-session, image/video, StoreKit redeem.
 - App Store Connect: app `6798391677`, three consumable credit IAPs. See `docs/TESTFLIGHT.md`,
   `docs/ASC-CHECKLIST.md`.
 
