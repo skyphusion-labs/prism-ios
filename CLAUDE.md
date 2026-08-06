@@ -50,6 +50,10 @@ xcodebuild -scheme Prism -destination 'generic/platform=iOS Simulator' build
 
 ## Apple Developer / App Store Connect (CLI)
 
+Signing is Conrad's **personal** Apple Developer Program membership (Team ID
+`858878N47M` in `project.yml`). There is no separate skyphusion org team. Branding
+(`org.skyphusion.prism`, ASC key name `skyphusion`) is product naming only.
+
 Use **`asc`** (`brew install asc`), not the dashboard, once an API key is registered:
 
 ```bash

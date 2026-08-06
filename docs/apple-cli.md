@@ -43,8 +43,9 @@ that contains key material. Repo docs only.
 
 | Item | Value |
 | --- | --- |
-| Team ID | `858878N47M` (bundle seedId) |
+| Team ID | `858878N47M` (personal Apple Developer Program membership / bundle seedId) |
 | In repo | `project.yml` → `DEVELOPMENT_TEAM` |
+| Note | Product brand is skyphusion; Apple membership is personal, not an org team |
 
 After changing `project.yml`: `xcodegen generate`.
 
