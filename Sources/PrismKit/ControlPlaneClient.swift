@@ -246,14 +246,21 @@ public final class ControlPlaneClient: @unchecked Sendable {
   /// Prefer `async: true` (plane 0.4.29+): returns a job id; poll ``getJob``.
   public func generateVideo(_ body: VideoGenerationRequest) async throws -> VideoGenerationResponse {
     let key = try requireKey()
+    var headers: [String: String] = [:]
+    // Prefer header is the reliable async signal if body encoding is lost.
+    if body.async == true {
+      headers["Prefer"] = "respond-async"
+    }
     let (httpRes, res): (HTTPURLResponse, VideoGenerationResponse) = try await http.sendJSONWithResponse(
       method: "POST",
       path: "/v1/videos/generations",
       body: body,
+      headers: headers,
       bearer: key,
       okStatuses: Set([200, 202]),
       timeout: body.async == true ? 60 : Self.musicTimeout,
-      preferBackground: body.async != true
+      // Async accept is a short POST; keep it foreground so 202 returns before lock.
+      preferBackground: false
     )
     if let err = res.error {
       throw PrismError.serverError(err.message ?? err.code ?? "video generation error")
@@ -285,12 +292,13 @@ public final class ControlPlaneClient: @unchecked Sendable {
   public func getJob(id: String) async throws -> AsyncJobResponse {
     let key = try requireKey()
     let path = "/v1/jobs/\(id)"
+    // Short poll: foreground session (background URLSession queues while suspended).
     return try await http.sendJSON(
       method: "GET",
       path: path,
       bearer: key,
       timeout: 30,
-      preferBackground: true
+      preferBackground: false
     )
   }
 
@@ -363,14 +371,19 @@ public final class ControlPlaneClient: @unchecked Sendable {
   /// Prefer `async: true` (plane 0.4.29+) for lock-safe poll.
   public func generateMusic(_ body: MusicGenerationRequest) async throws -> MusicGenerationResponse {
     let key = try requireKey()
+    var headers: [String: String] = [:]
+    if body.async == true {
+      headers["Prefer"] = "respond-async"
+    }
     let (httpRes, res): (HTTPURLResponse, MusicGenerationResponse) = try await http.sendJSONWithResponse(
       method: "POST",
       path: "/v1/music/generations",
       body: body,
+      headers: headers,
       bearer: key,
       okStatuses: Set([200, 202]),
       timeout: body.async == true ? 60 : Self.musicTimeout,
-      preferBackground: body.async != true
+      preferBackground: false
     )
     if let err = res.error {
       throw PrismError.serverError(err.message ?? err.code ?? "music generation error")

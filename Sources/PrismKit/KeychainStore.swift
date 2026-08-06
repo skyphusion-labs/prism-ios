@@ -30,6 +30,11 @@ public enum SecretStoreKeys {
   public static let hideUnspendable = "org.skyphusion.prism.pref.hide-unspendable"
   /// Require Face ID / Touch ID when opening the app with a stored device key.
   public static let biometricLockEnabled = "org.skyphusion.prism.pref.biometric-lock"
+  /// In-flight async plane job ids (survive lock / Task cancel so we can resume poll).
+  public static let pendingMusicJobId = "org.skyphusion.prism.job.music.id"
+  public static let pendingMusicJobModel = "org.skyphusion.prism.job.music.model"
+  public static let pendingVideoJobId = "org.skyphusion.prism.job.video.id"
+  public static let pendingVideoJobModel = "org.skyphusion.prism.job.video.model"
   /// App Group key for widget balance (UserDefaults suite, not Keychain).
   public static let appGroupId = "group.org.skyphusion.prism"
   public static let widgetBalanceKey = "widget.balance"
