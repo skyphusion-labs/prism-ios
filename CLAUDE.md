@@ -7,9 +7,8 @@ Guidance for agents working in this repository.
 **AGPL iOS client for Prism.** Shared Swift package (`PrismKit`) plus a SwiftUI app shell
 (`App/` + `Prism.xcodeproj`) for login, model pick, and chat against the playground Worker.
 
-**Status:** kit 0.5.3 + plane-default UX (balance, photo i2i, video player, share, cancel, picker
-search, error map). ASC app `6798391677`. Aviation-grade `main`. Next: plane receipt redeem when
-un-parked.
+**Status:** kit 0.6.1 (context-preserving model switch, store redeem client, spend preview, media
+history, retry, TestFlight/ASC docs). ASC app `6798391677`. Aviation-grade `main`.
 
 ## Related
 

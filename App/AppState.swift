@@ -54,6 +54,40 @@ enum BackendKind: String, CaseIterable, Identifiable {
   }
 }
 
+/// One generated image or video kept in-session for history / re-use.
+struct MediaHistoryItem: Identifiable, Equatable {
+  enum Kind: String, Equatable { case image, video }
+
+  let id: UUID
+  let kind: Kind
+  let model: String
+  let prompt: String
+  let createdAt: Date
+  let imageBase64: String?
+  let imageURL: String?
+  let videoURL: String?
+
+  init(
+    id: UUID = UUID(),
+    kind: Kind,
+    model: String,
+    prompt: String,
+    createdAt: Date = Date(),
+    imageBase64: String? = nil,
+    imageURL: String? = nil,
+    videoURL: String? = nil
+  ) {
+    self.id = id
+    self.kind = kind
+    self.model = model
+    self.prompt = prompt
+    self.createdAt = createdAt
+    self.imageBase64 = imageBase64
+    self.imageURL = imageURL
+    self.videoURL = videoURL
+  }
+}
+
 @MainActor
 final class AppState: ObservableObject {
   // MARK: - Backend
@@ -118,6 +152,13 @@ final class AppState: ObservableObject {
   @Published var mediaBusy: Bool = false
   @Published var mediaError: String?
   @Published var mediaStatus: String?
+  /// Elapsed seconds while a media job is running (video long-run UX).
+  @Published var mediaElapsedSeconds: Int = 0
+  /// Last N image/video results in this session (newest first). Cap 20.
+  @Published var mediaHistory: [MediaHistoryItem] = []
+  /// Last user text that failed (for Retry).
+  @Published private(set) var lastFailedChatText: String?
+  @Published private(set) var canRetryLastChat: Bool = false
 
   // MARK: - UI chrome
 
@@ -130,6 +171,8 @@ final class AppState: ObservableObject {
   private var controlPlane: ControlPlaneClient
   private var chatTask: Task<Void, Never>?
   private var mediaTask: Task<Void, Never>?
+  private var mediaTimerTask: Task<Void, Never>?
+  private static let mediaHistoryCap = 20
 
   init(secrets: (any SecretStore)? = nil) {
     let store = secrets ?? SecretStores.default()
@@ -227,6 +270,86 @@ final class AppState: ObservableObject {
     else { return }
     // Never clear turns / conversationId here -- that is only newChat().
     selectedModelId = modelId.isEmpty ? nil : modelId
+  }
+
+  /// Unit-price preview for image/video generate (catalog `priceLabel`).
+  func spendPreview(for model: ModelEntry?) -> String? {
+    guard let p = model?.priceLabel, !p.isEmpty else { return nil }
+    if p == "included" { return "Est. cost: included (no unit charge on this plan rate)" }
+    return "Est. cost: \(p) per request (metered after success)"
+  }
+
+  var imageSpendPreview: String? { spendPreview(for: selectedImageModel) }
+  var videoSpendPreview: String? { spendPreview(for: selectedVideoModel) }
+
+  /// Re-send the last failed user message (same context + current model).
+  func retryLastFailedChat() {
+    guard let text = lastFailedChatText, !text.isEmpty else { return }
+    draft = text
+    canRetryLastChat = false
+    send()
+  }
+
+  private func recordChatFailure(userText: String) {
+    lastFailedChatText = userText
+    canRetryLastChat = true
+  }
+
+  private func clearChatFailure() {
+    lastFailedChatText = nil
+    canRetryLastChat = false
+  }
+
+  private func startMediaTimer() {
+    mediaTimerTask?.cancel()
+    mediaElapsedSeconds = 0
+    mediaTimerTask = Task { @MainActor in
+      while !Task.isCancelled {
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        if Task.isCancelled { break }
+        mediaElapsedSeconds += 1
+      }
+    }
+  }
+
+  private func stopMediaTimer() {
+    mediaTimerTask?.cancel()
+    mediaTimerTask = nil
+  }
+
+  private func pushMediaHistory(_ item: MediaHistoryItem) {
+    mediaHistory.insert(item, at: 0)
+    if mediaHistory.count > Self.mediaHistoryCap {
+      mediaHistory = Array(mediaHistory.prefix(Self.mediaHistoryCap))
+    }
+  }
+
+  func restoreMediaHistoryItem(_ item: MediaHistoryItem) {
+    switch item.kind {
+    case .image:
+      lastImageBase64 = item.imageBase64
+      lastImageURL = item.imageURL
+      lastImageModel = item.model
+      imagePrompt = item.prompt
+      if let mid = imageModels.first(where: { $0.model == item.model })?.model {
+        selectedImageModelId = mid
+      }
+    case .video:
+      lastVideoURL = item.videoURL
+      lastVideoModel = item.model
+      videoPrompt = item.prompt
+      if let mid = videoModels.first(where: { $0.model == item.model })?.model {
+        selectedVideoModelId = mid
+      }
+    }
+  }
+
+  /// Re-run last video prompt/model after timeout or failure.
+  func retryLastVideo() {
+    guard !videoPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !videoImageRef.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    else { return }
+    generateVideo()
   }
 
   var selectedImageModel: ModelEntry? {
@@ -656,13 +779,16 @@ final class AppState: ObservableObject {
         // Client resends full turns as messages; model is only the next completion's id.
         try await sendPlane(model: model, assistantId: assistantId)
       }
+      clearChatFailure()
     } catch is CancellationError {
       updateAssistant(id: assistantId, text: "(cancelled)")
       errorMessage = PrismError.cancelled.userFacingMessage
+      recordChatFailure(userText: text)
     } catch {
       let msg = prismUserFacingError(error)
       updateAssistant(id: assistantId, text: "(error) \(msg)")
       errorMessage = msg
+      recordChatFailure(userText: text)
     }
   }
 
@@ -765,6 +891,7 @@ final class AppState: ObservableObject {
     turns = []
     conversationId = nil
     errorMessage = nil
+    clearChatFailure()
   }
 
   func clearChat() { newChat() }
@@ -784,6 +911,7 @@ final class AppState: ObservableObject {
   func cancelMedia() {
     mediaTask?.cancel()
     mediaTask = nil
+    stopMediaTimer()
     mediaBusy = false
     mediaStatus = nil
     mediaError = PrismError.cancelled.userFacingMessage
@@ -831,7 +959,11 @@ final class AppState: ObservableObject {
     mediaStatus = "Generating \(model.model)…"
     lastImageBase64 = nil
     lastImageURL = nil
-    defer { mediaBusy = false }
+    startMediaTimer()
+    defer {
+      stopMediaTimer()
+      mediaBusy = false
+    }
     let imageRef = imageImageRef.trimmingCharacters(in: .whitespacesAndNewlines)
     let caps = model.capabilities ?? []
     if caps.contains("image-input-required"), imageRef.isEmpty {
@@ -854,7 +986,16 @@ final class AppState: ObservableObject {
         mediaStatus = nil
         return
       }
-      mediaStatus = "Done · \(lastImageModel ?? model.model)"
+      mediaStatus = "Done · \(lastImageModel ?? model.model) · \(mediaElapsedSeconds)s"
+      pushMediaHistory(
+        MediaHistoryItem(
+          kind: .image,
+          model: lastImageModel ?? model.model,
+          prompt: prompt,
+          imageBase64: lastImageBase64,
+          imageURL: lastImageURL
+        )
+      )
       await refreshPlaneBalanceOnly()
     } catch is CancellationError {
       mediaError = PrismError.cancelled.userFacingMessage
@@ -888,7 +1029,11 @@ final class AppState: ObservableObject {
     mediaError = nil
     mediaStatus = "Generating \(model.model) (often 1–3 min)…"
     lastVideoURL = nil
-    defer { mediaBusy = false }
+    startMediaTimer()
+    defer {
+      stopMediaTimer()
+      mediaBusy = false
+    }
     do {
       try Task.checkCancellation()
       let res = try await controlPlane.generateVideo(
@@ -899,14 +1044,22 @@ final class AppState: ObservableObject {
       try Task.checkCancellation()
       lastVideoURL = res.video
       lastVideoModel = res.model ?? model.model
-      mediaStatus = "Done · \(lastVideoModel ?? model.model)"
+      mediaStatus = "Done · \(lastVideoModel ?? model.model) · \(mediaElapsedSeconds)s"
+      pushMediaHistory(
+        MediaHistoryItem(
+          kind: .video,
+          model: lastVideoModel ?? model.model,
+          prompt: prompt,
+          videoURL: lastVideoURL
+        )
+      )
       await refreshPlaneBalanceOnly()
     } catch is CancellationError {
       mediaError = PrismError.cancelled.userFacingMessage
       mediaStatus = nil
     } catch {
       mediaError = prismUserFacingError(error)
-      mediaStatus = nil
+      mediaStatus = "Failed after \(mediaElapsedSeconds)s · prompt kept for Retry"
     }
   }
 

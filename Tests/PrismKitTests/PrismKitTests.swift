@@ -9,7 +9,7 @@ import FoundationNetworking
 final class PrismKitTests: XCTestCase {
   func testHealthString() {
     XCTAssertEqual(PrismKit.health(), "ok:PrismKit")
-    XCTAssertEqual(PrismKit.version, "0.6.0")
+    XCTAssertEqual(PrismKit.version, "0.6.1")
   }
 
   func testSessionCookieExportRestore() throws {
@@ -544,6 +544,12 @@ final class ControlPlaneClientTests: XCTestCase {
     )
     XCTAssertFalse(u.dualPoolLines.isEmpty)
     XCTAssertTrue(u.balanceDescription.contains("spendable"))
+  }
+
+  func testRedactSecrets() {
+    let s = PrismError.redactSecrets("key pcp_abc123def456ghi789 secret")
+    XCTAssertFalse(s.contains("pcp_abc"))
+    XCTAssertTrue(s.contains("pcp_"))
   }
 
 }

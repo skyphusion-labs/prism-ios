@@ -50,11 +50,10 @@ CI runs package tests on Ubuntu. The iOS app is built with Xcode locally (not in
 
 ## Status
 
-- Kit **0.5.3**: dual backend; plane default; dual-pool balance; i2i photo picker; in-app video player;
-  share/save; cancel; model search; structured error copy; Grok video pairs with plane **0.4.14** ZDR upload.
-- App Store Connect: app `6798391677`, three consumable credit IAPs READY_TO_SUBMIT.
-- StoreKit 2 top-up UI (local `Configuration.storekit`); plane receipt redeem still deferred.
-- Next: plane receipt redeem when contract un-parks it.
+- Kit **0.6.1**: plane default; model switch keeps chat context; StoreKit → plane redeem (0.4.15+);
+  spend preview; media history; chat/video retry; elapsed timer; a11y hit targets; secret redaction.
+- App Store Connect: app `6798391677`, three consumable credit IAPs. See `docs/TESTFLIGHT.md`,
+  `docs/ASC-CHECKLIST.md`.
 
 ## Related
 
