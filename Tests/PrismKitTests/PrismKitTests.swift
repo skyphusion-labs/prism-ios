@@ -9,7 +9,7 @@ import FoundationNetworking
 final class PrismKitTests: XCTestCase {
   func testHealthString() {
     XCTAssertEqual(PrismKit.health(), "ok:PrismKit")
-    XCTAssertEqual(PrismKit.version, "0.8.1")
+    XCTAssertEqual(PrismKit.version, "0.8.3")
   }
 
   func testTranscriptionResponseDecode() throws {
@@ -675,11 +675,19 @@ final class ControlPlaneClientTests: XCTestCase {
       spendable_remaining_micro_usd: 1_200_000,
       overage: false,
       period: "2026-08",
-      period_micro_usd: nil,
-      period_requests: nil
+      period_start: nil,
+      period_end: nil,
+      period_micro_usd: 12_000,
+      period_requests: 3,
+      period_unmetered_requests: 1,
+      period_adjust_spend_micro_usd: 0,
+      period_adjust_credit_micro_usd: 0,
+      period_reconciled_micro_usd: 12_000
     )
     XCTAssertFalse(u.dualPoolLines.isEmpty)
     XCTAssertTrue(u.balanceDescription.contains("spendable"))
+    XCTAssertFalse(u.periodDetailLines.isEmpty)
+    XCTAssertTrue(ModelEntry(model: "m", label: "M", type: "chat", streaming: true, group: "premium", capabilities: ["vision"]).supportsVision)
   }
 
   func testRedactSecrets() {

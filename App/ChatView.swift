@@ -11,6 +11,8 @@ struct ChatView: View {
   @State private var sharePayload: ShareTextPayload?
   @State private var showSessions = false
   @State private var photoItem: PhotosPickerItem?
+  @StateObject private var chatRecorder = AudioRecorder()
+  @State private var showCamera = false
 
   var body: some View {
     VStack(spacing: 0) {
@@ -149,14 +151,28 @@ struct ChatView: View {
       }
 
       HStack(alignment: .bottom, spacing: 8) {
-        PhotosPicker(selection: $photoItem, matching: .images, photoLibrary: .shared()) {
+        Menu {
+          PhotosPicker(selection: $photoItem, matching: .images, photoLibrary: .shared()) {
+            Label("Photo library", systemImage: "photo.on.rectangle")
+          }
+          Button {
+            showCamera = true
+          } label: {
+            Label("Take photo", systemImage: "camera")
+          }
+          Button {
+            _ = state.pasteChatImageFromClipboard()
+          } label: {
+            Label("Paste image", systemImage: "doc.on.clipboard")
+          }
+        } label: {
           Image(systemName: "photo.on.rectangle")
             .font(.title3)
             .frame(minWidth: 44, minHeight: 44)
         }
         .disabled(state.isBusy || state.draftImageDataUrls.count >= 3)
         .accessibilityLabel("Attach photo")
-        .accessibilityHint("Add up to three images for vision models")
+        .accessibilityHint("Library, camera, or clipboard. Up to three images for vision models")
         .onChange(of: photoItem) { newItem in
           guard let newItem else { return }
           Task {
@@ -171,6 +187,19 @@ struct ChatView: View {
             photoItem = nil
           }
         }
+
+        // Hold to record → STT → draft
+        Button {
+          Task { await toggleChatMic() }
+        } label: {
+          Image(systemName: chatRecorder.isRecording || state.chatSttBusy ? "stop.circle.fill" : "mic.circle")
+            .font(.title2)
+            .foregroundStyle(chatRecorder.isRecording ? .red : .primary)
+            .frame(minWidth: 44, minHeight: 44)
+        }
+        .disabled(state.isBusy && !chatRecorder.isRecording)
+        .accessibilityLabel(chatRecorder.isRecording ? "Stop recording" : "Record for speech to text")
+        .accessibilityHint("Tap to start or stop. Transcript is added to the message draft.")
 
         TextField("Message", text: $state.draft, axis: .vertical)
           .lineLimit(1...6)
@@ -209,6 +238,17 @@ struct ChatView: View {
         }
       }
       .padding()
+      #if canImport(UIKit)
+      .fullScreenCover(isPresented: $showCamera) {
+        CameraPicker { data in
+          if let data {
+            state.attachChatImageJPEGData(data)
+          }
+          showCamera = false
+        }
+        .ignoresSafeArea()
+      }
+      #endif
     }
     .toolbar {
       ToolbarItem(placement: .topBarLeading) {
@@ -411,7 +451,65 @@ extension ChatView {
     Color.secondary.opacity(0.2)
     #endif
   }
+
+  @MainActor
+  fileprivate func toggleChatMic() async {
+    if chatRecorder.isRecording {
+      if let captured = chatRecorder.stop() {
+        state.sttToChatDraft(audioData: captured.data, mime: "audio/mp4")
+      }
+      return
+    }
+    if state.chatSttBusy { return }
+    let ok = await chatRecorder.requestPermission()
+    guard ok else {
+      state.errorMessage = "Microphone permission denied. Enable it in Settings."
+      return
+    }
+    do {
+      try chatRecorder.start()
+      Haptics.light()
+    } catch {
+      state.errorMessage = prismUserFacingError(error)
+    }
+  }
 }
+
+#if canImport(UIKit)
+/// Simple UIImagePickerController camera wrapper.
+private struct CameraPicker: UIViewControllerRepresentable {
+  var onFinish: (Data?) -> Void
+
+  func makeUIViewController(context: Context) -> UIImagePickerController {
+    let p = UIImagePickerController()
+    p.sourceType = UIImagePickerController.isSourceTypeAvailable(.camera) ? .camera : .photoLibrary
+    p.delegate = context.coordinator
+    p.allowsEditing = false
+    return p
+  }
+
+  func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+  func makeCoordinator() -> Coordinator { Coordinator(onFinish: onFinish) }
+
+  final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+    let onFinish: (Data?) -> Void
+    init(onFinish: @escaping (Data?) -> Void) { self.onFinish = onFinish }
+
+    func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+      onFinish(nil)
+    }
+
+    func imagePickerController(
+      _ picker: UIImagePickerController,
+      didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
+    ) {
+      let img = (info[.editedImage] ?? info[.originalImage]) as? UIImage
+      onFinish(img?.jpegData(compressionQuality: 0.75))
+    }
+  }
+}
+#endif
 
 #if canImport(UIKit)
 private func decodeDataURLImage(_ dataURL: String) -> UIImage? {

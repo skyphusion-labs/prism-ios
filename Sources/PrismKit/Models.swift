@@ -608,8 +608,14 @@ public struct UsageSummary: Codable, Sendable, Equatable {
   public let spendable_remaining_micro_usd: Int?
   public let overage: Bool?
   public let period: String?
+  public let period_start: String?
+  public let period_end: String?
   public let period_micro_usd: Int?
   public let period_requests: Int?
+  public let period_unmetered_requests: Int?
+  public let period_adjust_spend_micro_usd: Int?
+  public let period_adjust_credit_micro_usd: Int?
+  public let period_reconciled_micro_usd: Int?
 
   /// Single-line balance for banners.
   public var balanceDescription: String {
@@ -623,29 +629,92 @@ public struct UsageSummary: Codable, Sendable, Equatable {
     return "usage unknown"
   }
 
-  /// Multi-line dual-pool detail for Settings.
+  private static func usd(_ micro: Int) -> String {
+    String(format: "$%.4f", Double(micro) / 1_000_000.0)
+  }
+
+  /// Multi-line dual-pool detail for Settings / Usage screen.
   public var dualPoolLines: [String] {
     var lines: [String] = []
     if let s = spendable_remaining_micro_usd ?? remaining_micro_usd {
-      lines.append(String(format: "Spendable: $%.4f", Double(s) / 1_000_000.0))
+      lines.append("Spendable: \(Self.usd(s))")
     }
-    if let c = remaining_micro_usd ?? credit_micro_usd {
-      // Prefer prepaid remaining when both pools exist.
-      if let prepaid = remaining_micro_usd {
-        lines.append(String(format: "Prepaid remaining: $%.4f", Double(prepaid) / 1_000_000.0))
-      } else {
-        lines.append(String(format: "Prepaid credit: $%.4f", Double(c) / 1_000_000.0))
-      }
+    if let prepaid = remaining_micro_usd {
+      lines.append("Prepaid remaining: \(Self.usd(prepaid))")
+    } else if let c = credit_micro_usd {
+      lines.append("Prepaid credit (lifetime grant): \(Self.usd(c))")
+    }
+    if let spent = spent_micro_usd {
+      lines.append("Prepaid spent (lifetime): \(Self.usd(spent))")
     }
     if let a = allowance_remaining_micro_usd {
-      lines.append(String(format: "Monthly remaining: $%.4f", Double(a) / 1_000_000.0))
+      lines.append("Monthly remaining: \(Self.usd(a))")
     } else if let incl = monthly_included_micro_usd, let spent = allowance_spent_micro_usd {
-      let rem = max(0, incl - spent)
-      lines.append(String(format: "Monthly remaining: $%.4f", Double(rem) / 1_000_000.0))
+      lines.append("Monthly remaining: \(Self.usd(max(0, incl - spent)))")
+    }
+    if let incl = monthly_included_micro_usd {
+      lines.append("Monthly included: \(Self.usd(incl))")
     }
     if let p = period { lines.append("Period: \(p)") }
     if overage == true { lines.append("Overage: yes") }
     return lines
+  }
+
+  /// Period meter detail for the Usage screen.
+  public var periodDetailLines: [String] {
+    var lines: [String] = []
+    if let r = period_requests {
+      lines.append("Requests this period: \(r)")
+    }
+    if let u = period_unmetered_requests, u > 0 {
+      lines.append("Unmetered requests: \(u) (plane could not price; still served)")
+    }
+    if let est = period_micro_usd {
+      lines.append("Meter estimate: \(Self.usd(est))")
+    }
+    if let rec = period_reconciled_micro_usd {
+      lines.append("Reconciled spend: \(Self.usd(rec))")
+    }
+    if let adj = period_adjust_spend_micro_usd, adj > 0 {
+      lines.append("Reconcile +spend: \(Self.usd(adj))")
+    }
+    if let cr = period_adjust_credit_micro_usd, cr > 0 {
+      lines.append("Reconcile credits: \(Self.usd(cr))")
+    }
+    if let a = period_start, let b = period_end {
+      lines.append("Window: \(a) → \(b)")
+    }
+    return lines
+  }
+}
+
+extension ModelEntry {
+  /// Short capability tags for pickers (vision, stream, tier, unit).
+  public var capabilityTags: [String] {
+    var tags: [String] = []
+    let caps = capabilities ?? []
+    if caps.contains(where: { $0.localizedCaseInsensitiveContains("vision") })
+      || caps.contains("image-input")
+    {
+      tags.append("vision")
+    }
+    if streaming == true { tags.append("stream") }
+    if let g = group, !g.isEmpty { tags.append(g) }
+    if let p = priceLabel {
+      if p.contains("/request") || p.contains("/unit") || p.contains("/image") || p.contains("/video") {
+        tags.append("unit")
+      } else if p.contains("MTok") || p.contains("/M") {
+        tags.append("token")
+      }
+    }
+    if !isSpendable { tags.append("unspendable") }
+    return tags
+  }
+
+  public var supportsVision: Bool {
+    let caps = capabilities ?? []
+    return caps.contains(where: { $0.localizedCaseInsensitiveContains("vision") })
+      || caps.contains("image-input")
   }
 }
 
