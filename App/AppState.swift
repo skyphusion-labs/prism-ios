@@ -715,10 +715,11 @@ final class AppState: ObservableObject {
     let m = s / 60
     let r = s % 60
     let elapsed = m > 0 ? String(format: "%d:%02d", m, r) : "\(s)s"
-    // MiniMax full tracks often land in ~30–90s; longer if vocals/lyrics.
+    // Live MiniMax full tracks often ~2-4 min wall time (measured ~233s); lyrics/vocals
+    // and R2 rehost can push toward the plane's 5 min nonchat ceiling.
     let estimate = musicLyrics.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-      ? "often 30–90s"
-      : "often 1–2 min"
+      ? "often 2-4 min"
+      : "often 3-5 min"
     return "Elapsed \(elapsed) · \(estimate) · safe to leave tab"
   }
 
@@ -2519,7 +2520,7 @@ final class AppState: ObservableObject {
     musicBusy = true
     musicError = nil
     musicStatus =
-      "Generating \(model.model) · often 30–90s. Safe to leave the tab; keep Prism open or unlocked if you can."
+      "Generating \(model.model) · often 2-4 min (up to ~5 with lyrics). Safe to leave the tab; keep Prism open or unlocked if you can."
     lastMusicAudio = nil
     lastMusicData = nil
     lastMusicLocalURL = nil
@@ -2818,7 +2819,7 @@ final class AppState: ObservableObject {
       self?.endMusicBackgroundWork()
     }
     // Keep the screen awake while the user is still in Prism so lock does not
-    // suspend the request mid-generation (often 30–90s+ rehost).
+    // suspend the request mid-generation (full tracks often 2-4 min + rehost).
     UIApplication.shared.isIdleTimerDisabled = true
     #endif
   }
