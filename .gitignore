@@ -6,3 +6,7 @@
 *.xcworkspace/xcuserdata/
 DerivedData/
 xcuserdata/
+# Local archives / IPA export (TestFlight script output)
+build/
+*.xcarchive/
+*.ipa

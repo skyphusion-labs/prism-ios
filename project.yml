@@ -14,8 +14,8 @@ packages:
 settings:
   base:
     SWIFT_VERSION: "5.9"
-    MARKETING_VERSION: "0.8.0"
-    CURRENT_PROJECT_VERSION: "12"
+    MARKETING_VERSION: "0.8.1"
+    CURRENT_PROJECT_VERSION: "13"
     # skyphusion Apple Developer Team (bundle seedId)
     DEVELOPMENT_TEAM: "858878N47M"
     CODE_SIGN_STYLE: Automatic

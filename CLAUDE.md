@@ -7,7 +7,7 @@ Guidance for agents working in this repository.
 **AGPL iOS client for Prism.** Shared Swift package (`PrismKit`) plus a SwiftUI app shell
 (`App/` + `Prism.xcodeproj`) for login, model pick, and chat against the playground Worker.
 
-**Status:** kit 0.8.0 (STT + music doors; Audio tab TTS/STT; plus 0.7.x compact/speech/sessions).
+**Status:** kit 0.8.1 (More hub for Audio/Music; TestFlight archive script; plus 0.8.0 STT/music).
 ASC app `6798391677`. Aviation-grade `main`.
 
 ## Related
@@ -45,6 +45,7 @@ ASC app `6798391677`. Aviation-grade `main`.
 swift test                 # package tests (CI)
 xcodegen generate          # refresh Prism.xcodeproj from project.yml
 xcodebuild -scheme Prism -destination 'generic/platform=iOS Simulator' build
+./scripts/archive-testflight.sh   # device archive for TestFlight (needs signing)
 ```
 
 ## Apple Developer / App Store Connect (CLI)
