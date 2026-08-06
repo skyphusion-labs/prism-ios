@@ -86,10 +86,17 @@ public final class ControlPlaneClient: @unchecked Sendable {
   // MARK: - Inference
 
   public func chatCompletions(_ body: ControlPlaneChatRequest) async throws -> ControlPlaneChatResponse {
+    try await chatCompletionsWithMeter(body).0
+  }
+
+  /// Non-stream chat plus `prism-usage-micro-usd` / dual-pool remaining headers.
+  public func chatCompletionsWithMeter(
+    _ body: ControlPlaneChatRequest
+  ) async throws -> (ControlPlaneChatResponse, PlaneMeterHeaders) {
     let key = try requireKey()
     var payload = body
     payload.stream = false
-    let res: ControlPlaneChatResponse = try await http.sendJSON(
+    let (http, res): (HTTPURLResponse, ControlPlaneChatResponse) = try await http.sendJSONWithResponse(
       method: "POST",
       path: "/v1/chat/completions",
       body: payload,
@@ -98,7 +105,23 @@ public final class ControlPlaneClient: @unchecked Sendable {
     if let err = res.error {
       throw PrismError.serverError(err.message ?? err.code ?? "control plane error")
     }
-    return res
+    return (res, PlaneMeterHeaders(http: http))
+  }
+
+  /// Mint short-lived STT ticket for browser-style WS (native clients may use Bearer instead).
+  public func mintSttSession() async throws -> SttSessionTicket {
+    let key = try requireKey()
+    return try await http.sendJSON(
+      method: "POST",
+      path: "/v1/stt/sessions",
+      body: [String: String](),
+      bearer: key
+    )
+  }
+
+  /// WebSocket URL for live Flux STT (`GET /v1/stt/stream`).
+  public func sttStreamURL() throws -> URL {
+    try http.url(path: "/v1/stt/stream")
   }
 
   /// Streaming chat (`stream: true`). Yields OpenAI-compatible SSE frames as
@@ -140,11 +163,21 @@ public final class ControlPlaneClient: @unchecked Sendable {
 
   /// Multi-turn chat (non-streaming). Prefer building `messages` from the UI transcript.
   public func chat(model: String, messages: [ControlPlaneChatMessage]) async throws -> String {
-    let res = try await chatCompletions(ControlPlaneChatRequest(model: model, messages: messages, stream: false))
+    try await chatWithMeter(model: model, messages: messages).0
+  }
+
+  /// Non-stream multi-turn chat plus metering headers (`prism-usage-micro-usd`).
+  public func chatWithMeter(
+    model: String,
+    messages: [ControlPlaneChatMessage]
+  ) async throws -> (String, PlaneMeterHeaders) {
+    let (res, meter) = try await chatCompletionsWithMeter(
+      ControlPlaneChatRequest(model: model, messages: messages, stream: false)
+    )
     guard let text = res.firstContent, !text.isEmpty else {
       throw PrismError.serverError("Empty completion")
     }
-    return text
+    return (text, meter)
   }
 
   /// Collect stream deltas into one string.

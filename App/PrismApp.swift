@@ -14,8 +14,15 @@ struct PrismApp: App {
         .environmentObject(state)
         .tint(skyphusionAccent)
         .onChange(of: scenePhase) { phase in
-          guard phase == .active else { return }
-          Task { await state.onBecomeActive() }
+          switch phase {
+          case .background:
+            // Re-lock only when fully backgrounded (not Face ID sheet inactive).
+            state.lockIfNeeded()
+          case .active:
+            Task { await state.onBecomeActive() }
+          default:
+            break
+          }
         }
     }
   }

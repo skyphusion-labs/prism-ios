@@ -1,0 +1,6 @@
+Copyright (C) 2026 Conrad Rockenhaus / Skyphusion Labs
+
+Prism iOS is licensed under AGPL-3.0-only. See LICENSE for the full text.
+
+Native iOS client for Prism (inference + control plane). Same commons as the
+Worker stack; no proprietary app code.

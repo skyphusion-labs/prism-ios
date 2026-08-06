@@ -9,7 +9,23 @@ import FoundationNetworking
 final class PrismKitTests: XCTestCase {
   func testHealthString() {
     XCTAssertEqual(PrismKit.health(), "ok:PrismKit")
-    XCTAssertEqual(PrismKit.version, "0.8.3")
+    XCTAssertEqual(PrismKit.version, "0.8.4")
+  }
+
+  func testPlaneMeterHeadersCostDescription() {
+    let meter = PlaneMeterHeaders(usageMicroUsd: 1234, metered: true)
+    XCTAssertEqual(meter.costDescription, "This request: $0.001234")
+    let unmetered = PlaneMeterHeaders(usageMicroUsd: 0, metered: false)
+    XCTAssertEqual(unmetered.costDescription, "Unmetered (plane could not price this call)")
+  }
+
+  func testLiveSTTParseDeepgramPartialAndFinal() {
+    let partial = #"{"type":"Results","is_final":false,"channel":{"alternatives":[{"transcript":"hello"}]}}"#
+    let p = LiveSTTClient.parseDeepgram(partial)
+    XCTAssertEqual(p, [.partial("hello")])
+    let fin = #"{"type":"EndOfTurn","transcript":"hello world"}"#
+    let f = LiveSTTClient.parseDeepgram(fin)
+    XCTAssertEqual(f, [.final("hello world")])
   }
 
   func testTranscriptionResponseDecode() throws {

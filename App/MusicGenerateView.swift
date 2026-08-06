@@ -2,12 +2,16 @@ import SwiftUI
 import PrismKit
 #if canImport(UIKit)
 import UIKit
+import SafariServices
 #endif
 
 /// Control-plane music generation (`POST /v1/music/generations`).
 struct MusicGenerateView: View {
   @EnvironmentObject private var state: AppState
+  @Environment(\.openURL) private var openURL
   @State private var sharePayload: SharePayload?
+  @State private var safariURL: IdentifiedURL?
+  @State private var saveBusy = false
 
   var body: some View {
     VStack(spacing: 0) {
@@ -67,9 +71,19 @@ struct MusicGenerateView: View {
             Text(preview).font(.footnote).foregroundStyle(.secondary)
           }
           if state.musicBusy {
-            HStack {
+            HStack(alignment: .top, spacing: 10) {
               ProgressView()
-              Text(state.musicStatus ?? "Generating…").font(.footnote).foregroundStyle(.secondary)
+              VStack(alignment: .leading, spacing: 4) {
+                Text(state.musicStatus ?? "Generating…")
+                  .font(.footnote)
+                  .foregroundStyle(.secondary)
+                Text(state.musicElapsedLabel)
+                  .font(.caption2)
+                  .foregroundStyle(.secondary)
+                  .accessibilityLabel(
+                    "Generating, \(state.musicElapsedSeconds) seconds elapsed"
+                  )
+              }
             }
             Button(role: .destructive) { state.cancelMusic() } label: {
               Text("Cancel").frame(maxWidth: .infinity).frame(minHeight: 44)
@@ -84,10 +98,10 @@ struct MusicGenerateView: View {
         } header: {
           Text("Prompt")
         } footer: {
-          Text("Unit-priced per request. Long runs may take a minute.")
+          Text("Unit-priced per request. Full tracks often take 30–90s (longer with lyrics).")
         }
 
-        if let status = state.musicStatus {
+        if let status = state.musicStatus, !state.musicBusy {
           Section { Text(status).font(.footnote).foregroundStyle(.secondary) }
         }
         if let err = state.musicError {
@@ -96,36 +110,93 @@ struct MusicGenerateView: View {
 
         if state.lastMusicData != nil || state.lastMusicAudio != nil {
           Section {
-            if state.lastMusicData != nil {
-              Button { state.playLastMusic() } label: {
-                Label("Play", systemImage: "play.circle.fill")
-                  .frame(maxWidth: .infinity, alignment: .leading).frame(minHeight: 44)
+            Button {
+              state.playLastMusic()
+            } label: {
+              Label("Play", systemImage: "play.circle.fill")
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(minHeight: 44)
+            }
+            .accessibilityLabel("Play generated music")
+
+            if let url = state.lastMusicPlaybackURL {
+              Button {
+                // In-app Safari is more reliable than UIApplication.open for media URLs.
+                safariURL = IdentifiedURL(url: url)
+              } label: {
+                Label("Open audio URL", systemImage: "safari")
+                  .frame(maxWidth: .infinity, alignment: .leading)
+                  .frame(minHeight: 44)
+              }
+              .accessibilityLabel("Open audio URL in browser")
+              Text(url.absoluteString)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+            }
+
+            Button {
+              Task {
+                saveBusy = true
+                defer { saveBusy = false }
+                if let local = await state.saveLastMusicToLibrary() {
+                  sharePayload = SharePayload(items: [local])
+                }
+              }
+            } label: {
+              if saveBusy {
+                HStack {
+                  ProgressView()
+                  Text("Saving…")
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(minHeight: 44)
+              } else {
+                Label("Save to library", systemImage: "square.and.arrow.down")
+                  .frame(maxWidth: .infinity, alignment: .leading)
+                  .frame(minHeight: 44)
               }
             }
-            if let urlStr = state.lastMusicAudio, let url = URL(string: urlStr),
-               url.scheme?.hasPrefix("http") == true
-            {
-              Link("Open audio URL", destination: url)
-              Text(urlStr).font(.caption2).foregroundStyle(.secondary).textSelection(.enabled)
-            }
+            .disabled(saveBusy)
+            .accessibilityLabel("Save music to app library")
+            .accessibilityHint("Writes an mp3 under Application Support/Prism/Music, then opens Share")
+
             #if canImport(UIKit)
             Button {
-              if let data = state.lastMusicData {
-                let url = FileManager.default.temporaryDirectory.appendingPathComponent("prism-music.mp3")
-                try? data.write(to: url)
-                sharePayload = SharePayload(items: [url])
-              } else if let s = state.lastMusicAudio, let url = URL(string: s) {
-                sharePayload = SharePayload(items: [url])
+              Task {
+                if let data = state.lastMusicData {
+                  let url = state.musicLibraryDirectory()
+                    .appendingPathComponent("prism-music-share.mp3")
+                  try? data.write(to: url)
+                  sharePayload = SharePayload(items: [url])
+                } else if let local = state.lastMusicLocalURL {
+                  sharePayload = SharePayload(items: [local])
+                } else if let remote = state.lastMusicPlaybackURL {
+                  sharePayload = SharePayload(items: [remote])
+                }
               }
             } label: {
               Label("Share", systemImage: "square.and.arrow.up")
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(minHeight: 44)
             }
             #endif
+            if let local = state.lastMusicLocalURL {
+              Text(local.lastPathComponent)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+            }
             if let model = state.lastMusicModel {
               Text(model).font(.caption2).foregroundStyle(.secondary)
             }
           } header: {
             Text("Result")
+          } footer: {
+            Text(
+              "Audio is rehosted on play-proxy when possible (same pattern as Grok video). "
+                + "Save to library keeps an mp3 under Application Support/Prism/Music."
+            )
           }
         }
       }
@@ -134,6 +205,12 @@ struct MusicGenerateView: View {
     .sheet(item: $sharePayload) { payload in
       ActivityView(items: payload.items)
     }
+    #if canImport(UIKit)
+    .sheet(item: $safariURL) { item in
+      SafariView(url: item.url)
+        .ignoresSafeArea()
+    }
+    #endif
   }
 
   private func shortLabel(_ m: ModelEntry) -> String {
@@ -148,6 +225,11 @@ private struct SharePayload: Identifiable {
   let items: [Any]
 }
 
+private struct IdentifiedURL: Identifiable {
+  let id = UUID()
+  let url: URL
+}
+
 #if canImport(UIKit)
 private struct ActivityView: UIViewControllerRepresentable {
   let items: [Any]
@@ -155,6 +237,16 @@ private struct ActivityView: UIViewControllerRepresentable {
     UIActivityViewController(activityItems: items, applicationActivities: nil)
   }
   func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+private struct SafariView: UIViewControllerRepresentable {
+  let url: URL
+  func makeUIViewController(context: Context) -> SFSafariViewController {
+    let vc = SFSafariViewController(url: url)
+    vc.dismissButtonStyle = .done
+    return vc
+  }
+  func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
 }
 #endif
 

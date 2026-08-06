@@ -9,6 +9,9 @@ import AVFoundation
 import UIKit
 import UserNotifications
 #endif
+#if canImport(WidgetKit)
+import WidgetKit
+#endif
 
 /// One chat turn for the shell UI (also persisted in multi-session storage).
 ///
@@ -188,6 +191,18 @@ final class AppState: ObservableObject {
   @Published var draft: String = ""
   /// Pending chat image attachments (data URLs) for the next send.
   @Published var draftImageDataUrls: [String] = []
+  /// Last plane request cost from response headers (`prism-usage-micro-usd`).
+  @Published var lastRequestCost: String?
+  /// Biometric lock enabled (Face ID / Touch ID when app becomes active).
+  @Published var biometricLockEnabled: Bool = false
+  /// True until the user unlocks after launch / background.
+  @Published var isBiometricallyLocked: Bool = false
+  /// Live WebSocket STT is connected / streaming.
+  @Published var liveSttActive: Bool = false
+  /// Partial transcript while live STT is running.
+  @Published var liveSttPartial: String = ""
+  /// Live STT status line for the chat chrome.
+  @Published var liveSttStatus: String?
   @Published var conversationId: String?
   @Published var useStream: Bool = true
   /// Active compact state (playground server or plane local).
@@ -242,6 +257,8 @@ final class AppState: ObservableObject {
   @Published var musicBusy: Bool = false
   @Published var musicError: String?
   @Published var musicStatus: String?
+  /// Seconds elapsed while a music job is running (mirrors mediaElapsedSeconds).
+  @Published var musicElapsedSeconds: Int = 0
   /// Last user text that failed (for Retry).
   @Published private(set) var lastFailedChatText: String?
   @Published private(set) var canRetryLastChat: Bool = false
@@ -307,9 +324,11 @@ final class AppState: ObservableObject {
   private var mediaTask: Task<Void, Never>?
   private var speechTask: Task<Void, Never>?
   private var mediaTimerTask: Task<Void, Never>?
+  private var musicTimerTask: Task<Void, Never>?
   private var pathMonitor: NWPathMonitor?
   #if canImport(AVFoundation) && os(iOS)
   private var speechPlayer: AVAudioPlayer?
+  private var musicStreamPlayer: AVPlayer?
   #endif
   private static let mediaHistoryCap = 20
   private static let sessionCap = 50
@@ -673,6 +692,36 @@ final class AppState: ObservableObject {
     mediaTimerTask = nil
   }
 
+  private func startMusicTimer() {
+    musicTimerTask?.cancel()
+    musicElapsedSeconds = 0
+    musicTimerTask = Task { @MainActor in
+      while !Task.isCancelled {
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        if Task.isCancelled { break }
+        musicElapsedSeconds += 1
+      }
+    }
+  }
+
+  private func stopMusicTimer() {
+    musicTimerTask?.cancel()
+    musicTimerTask = nil
+  }
+
+  /// Live status line for the music form (elapsed + rough estimate).
+  var musicElapsedLabel: String {
+    let s = musicElapsedSeconds
+    let m = s / 60
+    let r = s % 60
+    let elapsed = m > 0 ? String(format: "%d:%02d", m, r) : "\(s)s"
+    // MiniMax full tracks often land in ~30–90s; longer if vocals/lyrics.
+    let estimate = musicLyrics.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+      ? "often 30–90s"
+      : "often 1–2 min"
+    return "Elapsed \(elapsed) · \(estimate) · safe to leave tab"
+  }
+
   private func pushMediaHistory(_ item: MediaHistoryItem) {
     mediaHistory.insert(item, at: 0)
     if mediaHistory.count > Self.mediaHistoryCap {
@@ -755,6 +804,10 @@ final class AppState: ObservableObject {
     #if canImport(UIKit)
     UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
     #endif
+    // Gate UI before any network when biometric lock is on with a stored key.
+    if biometricLockEnabled, deviceKeyPresent {
+      isBiometricallyLocked = true
+    }
     rebuildClients(clearSession: false)
     if backend == .controlPlane {
       await probePlaneHealth()
@@ -762,13 +815,50 @@ final class AppState: ObservableObject {
     await refreshModels()
   }
 
-  /// Foreground resume: cheap health + balance/models refresh when enrolled.
+  /// Foreground resume: cheap health + balance when unlocked (lock happens on background).
   func onBecomeActive() async {
+    guard !isBiometricallyLocked else { return }
     if backend == .controlPlane {
       await probePlaneHealth()
       if deviceKeyPresent {
         await refreshPlaneBalanceOnly()
       }
+    }
+  }
+
+  /// Call when scene enters background so the next open requires biometrics.
+  func lockIfNeeded() {
+    if biometricLockEnabled, deviceKeyPresent {
+      isBiometricallyLocked = true
+    }
+  }
+
+  func setBiometricLockEnabled(_ on: Bool) {
+    biometricLockEnabled = on
+    try? secrets.set(on ? "1" : "0", for: SecretStoreKeys.biometricLockEnabled)
+    if on, deviceKeyPresent {
+      isBiometricallyLocked = true
+    } else if !on {
+      isBiometricallyLocked = false
+    }
+  }
+
+  /// Face ID / Touch ID unlock (or device passcode fallback).
+  func unlockWithBiometrics() async {
+    guard biometricLockEnabled else {
+      isBiometricallyLocked = false
+      return
+    }
+    let ok = await BiometricLock.authenticate(reason: "Unlock Prism")
+    if ok {
+      isBiometricallyLocked = false
+      Haptics.success()
+      if backend == .controlPlane, deviceKeyPresent {
+        await probePlaneHealth()
+        await refreshPlaneBalanceOnly()
+      }
+    } else {
+      Haptics.warning()
     }
   }
 
@@ -841,6 +931,9 @@ final class AppState: ObservableObject {
     if let h = try? secrets.get(SecretStoreKeys.hideUnspendable) {
       hideUnspendable = (h != "0" && h != "false")
     }
+    if let b = try? secrets.get(SecretStoreKeys.biometricLockEnabled) {
+      biometricLockEnabled = (b == "1" || b == "true")
+    }
   }
 
   func persistSettings() {
@@ -848,6 +941,7 @@ final class AppState: ObservableObject {
     try? secrets.set(baseURLString, for: SecretStoreKeys.playgroundBaseURL)
     try? secrets.set(controlPlaneURLString, for: SecretStoreKeys.controlPlaneBaseURL)
     try? secrets.set(showDeveloperSettings ? "1" : "0", for: "prism.showDeveloperSettings")
+    try? secrets.set(biometricLockEnabled ? "1" : "0", for: SecretStoreKeys.biometricLockEnabled)
   }
 
   func persistUIPrefs() {
@@ -859,6 +953,7 @@ final class AppState: ObservableObject {
     try? secrets.set(selectedMusicModelId, for: SecretStoreKeys.selectedMusicModel)
     try? secrets.set(useStream ? "1" : "0", for: SecretStoreKeys.useStream)
     try? secrets.set(hideUnspendable ? "1" : "0", for: SecretStoreKeys.hideUnspendable)
+    try? secrets.set(biometricLockEnabled ? "1" : "0", for: SecretStoreKeys.biometricLockEnabled)
   }
 
   // MARK: - Multi-session chat
@@ -994,20 +1089,55 @@ final class AppState: ObservableObject {
     return try? enc.encode(sessions)
   }
 
-  /// Import sessions from JSON (merge by id).
-  func importSessionsJSON(_ data: Data) throws {
-    let dec = JSONDecoder()
-    dec.dateDecodingStrategy = .iso8601
-    let incoming = try dec.decode([ChatSession].self, from: data)
-    var byId = Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0) })
-    for s in incoming {
-      byId[s.id] = s
+  /// Preview of a chat export file (count + sample titles) before merge/replace.
+  struct ChatImportPreview: Equatable {
+    let count: Int
+    let titles: [String]
+    let newIds: Int
+    let overlappingIds: Int
+  }
+
+  /// Decode without applying; used for import confirmation UX.
+  func previewImportSessionsJSON(_ data: Data) throws -> ChatImportPreview {
+    let incoming = try decodeSessionsJSON(data)
+    let existing = Set(sessions.map(\.id))
+    let newIds = incoming.filter { !existing.contains($0.id) }.count
+    let overlapping = incoming.filter { existing.contains($0.id) }.count
+    let titles = incoming.prefix(5).map(\.title)
+    return ChatImportPreview(
+      count: incoming.count,
+      titles: Array(titles),
+      newIds: newIds,
+      overlappingIds: overlapping
+    )
+  }
+
+  /// Import sessions from JSON.
+  /// - Parameter replace: if true, replace local list with file; else merge by id (file wins on conflict).
+  @discardableResult
+  func importSessionsJSON(_ data: Data, replace: Bool = false) throws -> ChatImportPreview {
+    let incoming = try decodeSessionsJSON(data)
+    let preview = try previewImportSessionsJSON(data)
+    if replace {
+      sessions = incoming.sorted { $0.updatedAt > $1.updatedAt }
+    } else {
+      var byId = Dictionary(uniqueKeysWithValues: sessions.map { ($0.id, $0) })
+      for s in incoming {
+        byId[s.id] = s
+      }
+      sessions = Array(byId.values).sorted { $0.updatedAt > $1.updatedAt }
     }
-    sessions = Array(byId.values).sorted { $0.updatedAt > $1.updatedAt }
     trimSessions()
     saveSessionsToDisk()
     ensureActiveSession()
     Haptics.success()
+    return preview
+  }
+
+  private func decodeSessionsJSON(_ data: Data) throws -> [ChatSession] {
+    let dec = JSONDecoder()
+    dec.dateDecodingStrategy = .iso8601
+    return try dec.decode([ChatSession].self, from: data)
   }
 
   /// Write current transcript into `sessions` and disk.
@@ -1351,6 +1481,39 @@ final class AppState: ObservableObject {
     planeBalance = me.usage?.balanceDescription
     planeUsageLines = me.usage?.dualPoolLines ?? []
     banner = statusBannerPlane(modelCount: models.count, me: me)
+    publishWidgetBalance(planeBalance)
+  }
+
+  /// Write spendable balance into the App Group for the home-screen widget (no secrets).
+  private func publishWidgetBalance(_ balance: String?) {
+    let suite = UserDefaults(suiteName: SecretStoreKeys.appGroupId)
+    let text = balance ?? "Open Prism to refresh"
+    suite?.set(text, forKey: SecretStoreKeys.widgetBalanceKey)
+    let fmt = DateFormatter()
+    fmt.dateStyle = .none
+    fmt.timeStyle = .short
+    suite?.set("Updated \(fmt.string(from: Date()))", forKey: SecretStoreKeys.widgetUpdatedAtKey)
+    #if canImport(WidgetKit)
+    WidgetCenter.shared.reloadAllTimelines()
+    #endif
+  }
+
+  private func applyMeterHeaders(_ meter: PlaneMeterHeaders) {
+    if let cost = meter.costDescription {
+      lastRequestCost = cost
+    }
+    // Prefer remaining headers over a full /me round-trip when present.
+    var remainingBits: [String] = []
+    if let c = meter.creditRemainingMicroUsd {
+      remainingBits.append(String(format: "prepaid $%.4f", Double(c) / 1_000_000.0))
+    }
+    if let a = meter.allowanceRemainingMicroUsd {
+      remainingBits.append(String(format: "allowance $%.4f", Double(a) / 1_000_000.0))
+    }
+    if !remainingBits.isEmpty {
+      planeBalance = remainingBits.joined(separator: " · ")
+      publishWidgetBalance(planeBalance)
+    }
   }
 
   private func pickDefaultModel() {
@@ -1761,17 +1924,22 @@ final class AppState: ObservableObject {
          let i = turns.firstIndex(where: { $0.id == assistantId }),
          turns[i].text.isEmpty
       {
-        let text = try await controlPlane.chat(model: model.model, messages: messages)
+        let (text, meter) = try await controlPlane.chatWithMeter(model: model.model, messages: messages)
         try Task.checkCancellation()
         guard !text.isEmpty else {
           throw PrismError.serverError("Empty stream completion")
         }
         updateAssistant(id: assistantId, text: text)
+        applyMeterHeaders(meter)
+      } else {
+        // SSE rarely carries usage headers; balance refresh covers the spend.
+        lastRequestCost = "Streamed · cost in balance"
       }
     } else {
-      let text = try await controlPlane.chat(model: model.model, messages: messages)
+      let (text, meter) = try await controlPlane.chatWithMeter(model: model.model, messages: messages)
       try Task.checkCancellation()
       updateAssistant(id: assistantId, text: text)
+      applyMeterHeaders(meter)
     }
 
     await refreshPlaneBalanceOnly()
@@ -2193,17 +2361,27 @@ final class AppState: ObservableObject {
   func cancelMusic() {
     musicTask?.cancel()
     musicTask = nil
+    stopMusicTimer()
     musicBusy = false
     musicStatus = nil
     musicError = PrismError.cancelled.userFacingMessage
   }
 
+  /// Play last music result: inline bytes, or stream remote https URL.
   func playLastMusic() {
+    #if canImport(AVFoundation) && os(iOS)
+    do {
+      try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+      try AVAudioSession.sharedInstance().setActive(true)
+    } catch {
+      musicError = "Could not start audio session: \(error.localizedDescription)"
+      Haptics.error()
+      return
+    }
     if let data = lastMusicData {
-      #if canImport(AVFoundation) && os(iOS)
       do {
-        try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
-        try AVAudioSession.sharedInstance().setActive(true)
+        musicStreamPlayer?.pause()
+        musicStreamPlayer = nil
         speechPlayer = try AVAudioPlayer(data: data)
         speechPlayer?.prepareToPlay()
         speechPlayer?.play()
@@ -2212,10 +2390,111 @@ final class AppState: ObservableObject {
         musicError = "Could not play audio: \(error.localizedDescription)"
         Haptics.error()
       }
-      #endif
       return
     }
-    // URL-only: open is handled by the view (Link / share).
+    if let urlStr = lastMusicAudio,
+       let url = Self.musicPlaybackURL(from: urlStr)
+    {
+      speechPlayer?.stop()
+      speechPlayer = nil
+      let item = AVPlayerItem(url: url)
+      let player = AVPlayer(playerItem: item)
+      musicStreamPlayer = player
+      player.play()
+      Haptics.light()
+      return
+    }
+    musicError = "No playable audio on this result."
+    Haptics.warning()
+    #endif
+  }
+
+  /// Resolved https URL for the last music result (plane rehost or provider).
+  var lastMusicPlaybackURL: URL? {
+    guard let urlStr = lastMusicAudio else { return nil }
+    return Self.musicPlaybackURL(from: urlStr)
+  }
+
+  /// Local file if we already saved/prefetched this result into Application Support.
+  @Published var lastMusicLocalURL: URL?
+
+  /// Directory for user-visible music saves (Application Support/Prism/Music).
+  func musicLibraryDirectory() -> URL {
+    let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+      ?? FileManager.default.temporaryDirectory
+    let dir = base.appendingPathComponent("Prism/Music", isDirectory: true)
+    try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    return dir
+  }
+
+  /// Download remote audio (or write inline bytes) into Prism/Music and set lastMusicLocalURL.
+  @discardableResult
+  func saveLastMusicToLibrary() async -> URL? {
+    musicError = nil
+    if let data = lastMusicData, !data.isEmpty {
+      return writeMusicDataToLibrary(data)
+    }
+    guard let remote = lastMusicPlaybackURL else {
+      musicError = "No audio to save."
+      Haptics.warning()
+      return nil
+    }
+    do {
+      let (data, _) = try await URLSession.shared.data(from: remote)
+      guard !data.isEmpty else {
+        musicError = "Empty audio download."
+        Haptics.error()
+        return nil
+      }
+      lastMusicData = data
+      return writeMusicDataToLibrary(data)
+    } catch {
+      musicError = "Could not download audio: \(error.localizedDescription)"
+      Haptics.error()
+      return nil
+    }
+  }
+
+  private func writeMusicDataToLibrary(_ data: Data) -> URL? {
+    let name = "prism-music-\(Int(Date().timeIntervalSince1970)).mp3"
+    let url = musicLibraryDirectory().appendingPathComponent(name)
+    do {
+      try data.write(to: url, options: .atomic)
+      lastMusicLocalURL = url
+      musicStatus = "Saved · \(name)"
+      Haptics.success()
+      return url
+    } catch {
+      musicError = "Could not save audio: \(error.localizedDescription)"
+      Haptics.error()
+      return nil
+    }
+  }
+
+  /// Prefetch plane/provider audio into memory so Play/Save work offline for a while.
+  private func prefetchMusicIfNeeded(urlString: String) async {
+    guard lastMusicData == nil,
+          let url = Self.musicPlaybackURL(from: urlString)
+    else { return }
+    // Only auto-prefetch our play-proxy media URLs (stable, ours). Skip flaky third-party OSS.
+    guard url.host?.contains("play-proxy") == true || url.path.contains("/v1/media/") else {
+      return
+    }
+    if let (data, _) = try? await URLSession.shared.data(from: url), !data.isEmpty {
+      lastMusicData = data
+    }
+  }
+
+  /// Parse play-proxy or provider URLs (percent-encoded path stays intact).
+  private static func musicPlaybackURL(from raw: String) -> URL? {
+    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return nil }
+    if let u = URL(string: trimmed), let scheme = u.scheme?.lowercased(),
+       scheme == "http" || scheme == "https"
+    {
+      return u
+    }
+    return nil
   }
 
   private func performGenerateMusic() async {
@@ -2242,7 +2521,12 @@ final class AppState: ObservableObject {
     musicStatus = "Generating \(model.model)…"
     lastMusicAudio = nil
     lastMusicData = nil
-    defer { musicBusy = false }
+    lastMusicLocalURL = nil
+    startMusicTimer()
+    defer {
+      stopMusicTimer()
+      musicBusy = false
+    }
     let lyrics = musicLyrics.trimmingCharacters(in: .whitespacesAndNewlines)
     do {
       try Task.checkCancellation()
@@ -2255,19 +2539,20 @@ final class AppState: ObservableObject {
       lastMusicAudio = res.audio
       lastMusicData = res.audioData
       lastMusicModel = res.model ?? model.model
-      musicStatus = "Done · \(lastMusicModel ?? model.model)"
+      musicStatus = "Done · \(lastMusicModel ?? model.model) · \(musicElapsedSeconds)s"
       Haptics.success()
-      if lastMusicData != nil {
-        playLastMusic()
+      // Do not auto-play (user controls Play). Optionally cache remote audio for Save.
+      if lastMusicData == nil, let urlStr = lastMusicAudio {
+        Task { await self.prefetchMusicIfNeeded(urlString: urlStr) }
       }
       await refreshPlaneBalanceOnly()
     } catch is CancellationError {
       musicError = PrismError.cancelled.userFacingMessage
-      musicStatus = nil
+      musicStatus = "Cancelled after \(musicElapsedSeconds)s"
       Haptics.warning()
     } catch {
       musicError = prismUserFacingError(error)
-      musicStatus = nil
+      musicStatus = "Failed after \(musicElapsedSeconds)s"
       Haptics.error()
     }
   }
@@ -2349,6 +2634,115 @@ final class AppState: ObservableObject {
 
   @Published var chatSttBusy = false
   private var chatSttTask: Task<Void, Never>?
+  private var liveSttClient: LiveSTTClient?
+  private var liveSttListenTask: Task<Void, Never>?
+  private var liveSttFinals: [String] = []
+
+  /// Start live Flux STT WebSocket (Bearer upgrade). Feed PCM via `sendLiveSttPCM`.
+  func startLiveStt() async {
+    guard canUseMediaDoors else {
+      errorMessage = "Control plane + device key required for live speech-to-text."
+      return
+    }
+    if !isNetworkSatisfied {
+      errorMessage = "No network connection."
+      return
+    }
+    guard let key = controlPlane.clientKey, !key.isEmpty else {
+      errorMessage = "No device key."
+      return
+    }
+    await stopLiveStt(commit: false)
+    liveSttFinals = []
+    liveSttPartial = ""
+    liveSttStatus = "Connecting…"
+    do {
+      let url = try controlPlane.sttStreamURL()
+      let client = LiveSTTClient()
+      try await client.connect(streamURL: url, bearerKey: key)
+      liveSttClient = client
+      liveSttActive = true
+      liveSttStatus = "Listening…"
+      Haptics.light()
+      liveSttListenTask = Task { [weak self] in
+        guard let self else { return }
+        for await event in await client.events() {
+          await MainActor.run {
+            self.handleLiveSttEvent(event)
+          }
+        }
+        await MainActor.run {
+          if self.liveSttActive {
+            self.liveSttActive = false
+            self.liveSttStatus = nil
+          }
+        }
+      }
+    } catch {
+      liveSttActive = false
+      liveSttStatus = nil
+      errorMessage = prismUserFacingError(error)
+      Haptics.error()
+    }
+  }
+
+  func sendLiveSttPCM(_ data: Data) {
+    guard liveSttActive, let client = liveSttClient else { return }
+    Task {
+      try? await client.sendPCM(data)
+    }
+  }
+
+  /// Stop live STT. When `commit` is true, append finals + partial into the chat draft.
+  func stopLiveStt(commit: Bool = true) async {
+    liveSttListenTask?.cancel()
+    liveSttListenTask = nil
+    if let client = liveSttClient {
+      await client.disconnect()
+    }
+    liveSttClient = nil
+    let partial = liveSttPartial.trimmingCharacters(in: .whitespacesAndNewlines)
+    if commit {
+      var pieces = liveSttFinals
+      if !partial.isEmpty { pieces.append(partial) }
+      let joined = pieces.joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+      if !joined.isEmpty {
+        draft = draft.isEmpty ? joined : (draft + " " + joined)
+        lastTranscript = joined
+        banner = "Live transcript added to draft"
+        Haptics.success()
+        await refreshPlaneBalanceOnly()
+      }
+    }
+    liveSttFinals = []
+    liveSttPartial = ""
+    liveSttActive = false
+    liveSttStatus = nil
+  }
+
+  private func handleLiveSttEvent(_ event: LiveSTTClient.Event) {
+    switch event {
+    case .partial(let t):
+      liveSttPartial = t
+      liveSttStatus = "Listening…"
+    case .final(let t):
+      let trimmed = t.trimmingCharacters(in: .whitespacesAndNewlines)
+      if !trimmed.isEmpty {
+        liveSttFinals.append(trimmed)
+      }
+      liveSttPartial = ""
+    case .raw:
+      break
+    case .closed(let reason):
+      liveSttActive = false
+      liveSttStatus = reason.map { "Closed: \($0)" }
+    case .failed(let msg):
+      liveSttActive = false
+      liveSttStatus = nil
+      errorMessage = msg
+      Haptics.error()
+    }
+  }
 
   private func performSttToChatDraft(audioData: Data, mime: String) async {
     guard canUseMediaDoors else {

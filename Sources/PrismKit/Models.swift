@@ -1,5 +1,9 @@
 import Foundation
 
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+
 // Shared Codable shapes for Prism playground (`play.skyphusion.org` / self-host)
 // and the commercial control plane. Keep additive-friendly decoding: unknown
 // JSON fields are ignored by Codable defaults.
@@ -91,7 +95,8 @@ extension PrismError: LocalizedError {
       return "Generation timed out. Retry, or use Seedance Fast / Veo Fast."
     case "upstream_error":
       if message.contains("7003") || message.localizedCaseInsensitiveContains("user input") {
-        return "Provider rejected the request (7003). Prefer Veo or Seedance Fast for video; check the model footer."
+        // 7003 is CF "User Input Error" across doors (video schema, music required fields, etc.).
+        return "Provider rejected the request (7003). Video: try Veo/Seedance without a reference still. Music: style prompt only (instrumental default) or add lyrics. Retry after plane updates if this persists."
       }
       if message.localizedCaseInsensitiveContains("upload_url")
         || message.localizedCaseInsensitiveContains("zero data retention")
@@ -115,7 +120,7 @@ extension PrismError: LocalizedError {
       return "Out of credit. Open Settings → Top up, or wait for monthly allowance reset."
     }
     if lower.contains("7003") {
-      return "Provider rejected the request (7003). Prefer Veo or Seedance Fast for video."
+      return "Provider rejected the request (7003). Video: clear reference still / use Veo or Seedance. Music: plain style prompt or lyrics."
     }
     if lower.contains("requires an image") || lower.contains("i2v") && lower.contains("image") {
       return "This model needs a reference image. Add a photo or URL, or pick Veo / Seedance for text-only video."
@@ -685,6 +690,75 @@ public struct UsageSummary: Codable, Sendable, Equatable {
       lines.append("Window: \(a) → \(b)")
     }
     return lines
+  }
+}
+
+/// Metering facts from plane response headers (non-stream chat / media).
+public struct PlaneMeterHeaders: Sendable, Equatable {
+  public let usageMicroUsd: Int?
+  public let metered: Bool?
+  public let model: String?
+  public let period: String?
+  public let creditRemainingMicroUsd: Int?
+  public let allowanceRemainingMicroUsd: Int?
+
+  public init(
+    usageMicroUsd: Int? = nil,
+    metered: Bool? = nil,
+    model: String? = nil,
+    period: String? = nil,
+    creditRemainingMicroUsd: Int? = nil,
+    allowanceRemainingMicroUsd: Int? = nil
+  ) {
+    self.usageMicroUsd = usageMicroUsd
+    self.metered = metered
+    self.model = model
+    self.period = period
+    self.creditRemainingMicroUsd = creditRemainingMicroUsd
+    self.allowanceRemainingMicroUsd = allowanceRemainingMicroUsd
+  }
+
+  public init(http: HTTPURLResponse) {
+    func header(_ name: String) -> String? {
+      // HTTPURLResponse is case-insensitive on Apple; Linux may not be.
+      if let v = http.value(forHTTPHeaderField: name) { return v }
+      return http.value(forHTTPHeaderField: name.lowercased())
+    }
+    usageMicroUsd = header("prism-usage-micro-usd").flatMap(Int.init)
+    if let m = header("prism-metered") {
+      metered = m == "true" || m == "1"
+    } else {
+      metered = nil
+    }
+    model = header("prism-model")
+    period = header("prism-period")
+    creditRemainingMicroUsd = header("prism-credit-remaining-micro-usd").flatMap(Int.init)
+    allowanceRemainingMicroUsd = header("prism-allowance-remaining-micro-usd").flatMap(Int.init)
+  }
+
+  public var costDescription: String? {
+    guard let u = usageMicroUsd else { return nil }
+    if metered == false {
+      return "Unmetered (plane could not price this call)"
+    }
+    let usd = Double(u) / 1_000_000.0
+    if usd >= 0.01 {
+      return String(format: "This request: $%.4f", usd)
+    }
+    return String(format: "This request: $%.6f", usd)
+  }
+}
+
+public struct SttSessionTicket: Codable, Sendable, Equatable {
+  public let ticket: String
+  public let expires_at: String?
+  public let expires_in: Int?
+  public let ws_protocol: String?
+  public let stream_path: String?
+
+  enum CodingKeys: String, CodingKey {
+    case ticket, expires_at, expires_in, stream_path
+    case ws_protocol = "protocol"
   }
 }
 

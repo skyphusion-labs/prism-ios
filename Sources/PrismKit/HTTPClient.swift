@@ -130,6 +130,30 @@ public final class HTTPClient: @unchecked Sendable {
     okStatuses: Set<Int> = Set(200...299),
     timeout: TimeInterval? = nil
   ) async throws -> T {
+    let pair: (HTTPURLResponse, T) = try await sendJSONWithResponse(
+      method: method,
+      path: path,
+      body: body,
+      headers: headers,
+      bearer: bearer,
+      as: type,
+      okStatuses: okStatuses,
+      timeout: timeout
+    )
+    return pair.1
+  }
+
+  /// Like `sendJSON` but also returns the HTTP response (for `prism-usage-micro-usd`, etc.).
+  public func sendJSONWithResponse<T: Decodable>(
+    method: String,
+    path: String,
+    body: (any Encodable)? = nil,
+    headers: [String: String] = [:],
+    bearer: String? = nil,
+    as type: T.Type = T.self,
+    okStatuses: Set<Int> = Set(200...299),
+    timeout: TimeInterval? = nil
+  ) async throws -> (HTTPURLResponse, T) {
     let dataBody: Data?
     if let body {
       dataBody = try JSONEncoder().encode(AnyEncodable(body))
@@ -149,7 +173,8 @@ public final class HTTPClient: @unchecked Sendable {
       throw Self.prismError(from: data, status: http.statusCode)
     }
     do {
-      return try JSONDecoder().decode(T.self, from: data)
+      let value = try JSONDecoder().decode(T.self, from: data)
+      return (http, value)
     } catch {
       throw PrismError.decoding(error.localizedDescription)
     }

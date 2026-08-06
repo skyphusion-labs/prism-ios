@@ -12,6 +12,7 @@ struct ChatView: View {
   @State private var showSessions = false
   @State private var photoItem: PhotosPickerItem?
   @StateObject private var chatRecorder = AudioRecorder()
+  @StateObject private var liveMic = LivePCMCapture()
   @State private var showCamera = false
 
   var body: some View {
@@ -33,6 +34,40 @@ struct ChatView: View {
           .frame(maxWidth: .infinity, alignment: .leading)
           .padding(.horizontal)
           .padding(.vertical, 6)
+      }
+      if let cost = state.lastRequestCost {
+        Text(cost)
+          .font(.caption2.weight(.medium))
+          .foregroundStyle(.secondary)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding(.horizontal)
+          .padding(.bottom, 2)
+          .accessibilityLabel(cost)
+      }
+      if state.liveSttActive || state.liveSttStatus != nil {
+        HStack(spacing: 8) {
+          Image(systemName: "waveform")
+            .foregroundStyle(.red)
+          VStack(alignment: .leading, spacing: 2) {
+            Text(state.liveSttStatus ?? "Live STT")
+              .font(.caption.weight(.semibold))
+            if !state.liveSttPartial.isEmpty {
+              Text(state.liveSttPartial)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+            }
+          }
+          Spacer()
+          Button("Stop") {
+            Task { await stopLiveListen() }
+          }
+          .font(.caption.weight(.semibold))
+        }
+        .padding(.horizontal)
+        .padding(.vertical, 6)
+        .background(Color.red.opacity(0.08))
+        .accessibilityElement(children: .combine)
       }
 
       ModelPickerView()
@@ -188,18 +223,44 @@ struct ChatView: View {
           }
         }
 
-        // Hold to record → STT → draft
-        Button {
-          Task { await toggleChatMic() }
+        // Record (file STT) or Live (WebSocket Flux) → draft
+        Menu {
+          Button {
+            Task { await toggleChatMic() }
+          } label: {
+            Label(
+              chatRecorder.isRecording ? "Stop recording" : "Record (file STT)",
+              systemImage: "mic"
+            )
+          }
+          Button {
+            Task { await toggleLiveListen() }
+          } label: {
+            Label(
+              state.liveSttActive ? "Stop live listen" : "Live listen (WebSocket)",
+              systemImage: "waveform"
+            )
+          }
+          .disabled(!state.canUseMediaDoors)
         } label: {
-          Image(systemName: chatRecorder.isRecording || state.chatSttBusy ? "stop.circle.fill" : "mic.circle")
-            .font(.title2)
-            .foregroundStyle(chatRecorder.isRecording ? .red : .primary)
-            .frame(minWidth: 44, minHeight: 44)
+          Image(
+            systemName: chatRecorder.isRecording || state.liveSttActive || state.chatSttBusy
+              ? "stop.circle.fill"
+              : "mic.circle"
+          )
+          .font(.title2)
+          .foregroundStyle(
+            chatRecorder.isRecording || state.liveSttActive ? .red : .primary
+          )
+          .frame(minWidth: 44, minHeight: 44)
         }
-        .disabled(state.isBusy && !chatRecorder.isRecording)
-        .accessibilityLabel(chatRecorder.isRecording ? "Stop recording" : "Record for speech to text")
-        .accessibilityHint("Tap to start or stop. Transcript is added to the message draft.")
+        .disabled(state.isBusy && !chatRecorder.isRecording && !state.liveSttActive)
+        .accessibilityLabel(
+          state.liveSttActive
+            ? "Live speech to text active"
+            : (chatRecorder.isRecording ? "Stop recording" : "Speech to text")
+        )
+        .accessibilityHint("Record file STT or live WebSocket listen. Transcript goes into the draft.")
 
         TextField("Message", text: $state.draft, axis: .vertical)
           .lineLimit(1...6)
@@ -454,6 +515,9 @@ extension ChatView {
 
   @MainActor
   fileprivate func toggleChatMic() async {
+    if state.liveSttActive {
+      await stopLiveListen()
+    }
     if chatRecorder.isRecording {
       if let captured = chatRecorder.stop() {
         state.sttToChatDraft(audioData: captured.data, mime: "audio/mp4")
@@ -472,6 +536,40 @@ extension ChatView {
     } catch {
       state.errorMessage = prismUserFacingError(error)
     }
+  }
+
+  @MainActor
+  fileprivate func toggleLiveListen() async {
+    if state.liveSttActive {
+      await stopLiveListen()
+      return
+    }
+    if chatRecorder.isRecording {
+      _ = chatRecorder.stop()
+    }
+    let ok = await liveMic.requestPermission()
+    guard ok else {
+      state.errorMessage = "Microphone permission denied. Enable it in Settings."
+      return
+    }
+    liveMic.onPCM = { data in
+      state.sendLiveSttPCM(data)
+    }
+    await state.startLiveStt()
+    guard state.liveSttActive else { return }
+    do {
+      try liveMic.start()
+    } catch {
+      await state.stopLiveStt(commit: false)
+      state.errorMessage = prismUserFacingError(error)
+    }
+  }
+
+  @MainActor
+  fileprivate func stopLiveListen() async {
+    liveMic.stop()
+    liveMic.onPCM = nil
+    await state.stopLiveStt(commit: true)
   }
 }
 
