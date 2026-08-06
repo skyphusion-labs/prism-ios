@@ -113,13 +113,18 @@ public final class ControlPlaneClient: @unchecked Sendable {
           var payload = body
           payload.stream = true
           let dataBody = try JSONEncoder().encode(payload)
-          let req = try http.request(
+          var req = try http.request(
             method: "POST",
             path: "/v1/chat/completions",
             body: dataBody,
             headers: ["Accept": "text/event-stream"],
-            bearer: key
+            bearer: key,
+            // Whole-stream budget; idle between frames is session timeoutIntervalForRequest.
+            timeout: 900
           )
+          // URLRequest.timeoutInterval defaults to 60 and overrides the session resource
+          // budget for the first-byte wait on some OS versions -- raise it for SSE.
+          req.timeoutInterval = 900
           for try await event in SSEStream.chatEvents(session: http.session, request: req) {
             if Task.isCancelled { break }
             continuation.yield(event)
