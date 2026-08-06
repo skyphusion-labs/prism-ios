@@ -222,4 +222,29 @@ public final class ControlPlaneClient: @unchecked Sendable {
   public func generateVideo(model: String, prompt: String, image: String? = nil) async throws -> VideoGenerationResponse {
     try await generateVideo(VideoGenerationRequest(model: model, prompt: prompt, image: image))
   }
+
+  // MARK: - Store
+
+  /// Apply a StoreKit 2 signed transaction as prepaid credit (`POST /v1/store/redeem`).
+  public func redeemStore(signedTransaction: String) async throws -> StoreRedeemResponse {
+    let key = try requireKey()
+    struct Body: Encodable {
+      let signed_transaction: String
+    }
+    let res: StoreRedeemResponse = try await http.sendJSON(
+      method: "POST",
+      path: "/v1/store/redeem",
+      body: Body(signed_transaction: signedTransaction),
+      bearer: key,
+      okStatuses: Set([200])
+    )
+    if let err = res.error {
+      throw PrismError.api(
+        code: err.code ?? "store_error",
+        message: err.message ?? "store redeem failed",
+        httpStatus: nil
+      )
+    }
+    return res
+  }
 }

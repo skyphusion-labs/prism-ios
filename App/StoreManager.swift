@@ -2,10 +2,7 @@ import Foundation
 import PrismKit
 import StoreKit
 
-/// StoreKit 2 loader + purchase for control-plane credit packs.
-///
-/// Purchases are finished locally. Mapping a transaction to control-plane credit
-/// is deferred until the plane store-receipt path is un-parked.
+/// StoreKit 2 loader + purchase; redeems via control plane after verification.
 @MainActor
 final class StoreManager: ObservableObject {
   @Published private(set) var products: [Product] = []
@@ -14,6 +11,10 @@ final class StoreManager: ObservableObject {
   @Published var statusMessage: String?
   @Published var errorMessage: String?
   @Published private(set) var lastTransactionId: String?
+
+  /// Injected when Settings attaches; used to redeem after purchase.
+  var redeemHandler: ((String) async throws -> StoreRedeemResponse)?
+  var onRedeemed: (() async -> Void)?
 
   private var updatesTask: Task<Void, Never>?
 
@@ -25,11 +26,8 @@ final class StoreManager: ObservableObject {
     updatesTask?.cancel()
   }
 
-  /// Products sorted low → high by display price when available.
   var sortedProducts: [Product] {
-    products.sorted { a, b in
-      a.price < b.price
-    }
+    products.sorted { a, b in a.price < b.price }
   }
 
   func loadProducts() async {
@@ -47,7 +45,7 @@ final class StoreManager: ObservableObject {
         statusMessage = "\(loaded.count) credit pack(s) available"
       }
     } catch {
-      errorMessage = error.localizedDescription
+      errorMessage = prismUserFacingError(error)
       products = []
     }
   }
@@ -64,12 +62,9 @@ final class StoreManager: ObservableObject {
       case .success(let verification):
         let transaction = try checkVerified(verification)
         lastTransactionId = String(transaction.id)
-        await transaction.finish()
-        let pack = StoreProducts.packs.first { $0.productId == product.id }
-        let credit = pack.map { "\($0.creditUSD) USD intended" } ?? product.id
-        statusMessage =
-          "Purchase complete (\(credit)). Transaction \(transaction.id). Control-plane credit apply is not wired yet (plane receipt path deferred)."
-        return true
+        // JWS lives on VerificationResult (StoreKit 2), not Transaction.
+        let ok = await redeemAndFinish(transaction, jws: verification.jwsRepresentation)
+        return ok
       case .userCancelled:
         statusMessage = "Purchase cancelled"
         return false
@@ -81,7 +76,41 @@ final class StoreManager: ObservableObject {
         return false
       }
     } catch {
-      errorMessage = error.localizedDescription
+      errorMessage = prismUserFacingError(error)
+      return false
+    }
+  }
+
+  private func redeemAndFinish(_ transaction: Transaction, jws: String) async -> Bool {
+    guard let redeemHandler else {
+      // No plane handler: finish so StoreKit does not loop; credit not applied.
+      await transaction.finish()
+      statusMessage =
+        "Purchase recorded locally (tx \(transaction.id)) but control plane redeem is not attached. Open Settings on Control plane."
+      return false
+    }
+    do {
+      let res = try await redeemHandler(jws)
+      await transaction.finish()
+      let usd: String
+      if let m = res.credit_granted_micro_usd, res.applied == true {
+        usd = String(format: "$%.0f", Double(m) / 1_000_000.0)
+      } else if let pack = StoreProducts.packs.first(where: { $0.productId == transaction.productID }) {
+        usd = "\(pack.creditUSD) USD"
+      } else {
+        usd = transaction.productID
+      }
+      if res.applied == true {
+        statusMessage = "Credit applied (\(usd)). Balance refresh…"
+      } else {
+        statusMessage = "Already redeemed (tx \(transaction.id)). Balance refresh…"
+      }
+      await onRedeemed?()
+      return true
+    } catch {
+      // Do not finish on redeem failure — StoreKit will redeliver via Transaction.updates.
+      errorMessage = prismUserFacingError(error)
+      statusMessage = "Purchase verified; credit apply failed. Will retry."
       return false
     }
   }
@@ -100,14 +129,13 @@ final class StoreManager: ObservableObject {
       do {
         let transaction = try checkVerified(update)
         lastTransactionId = String(transaction.id)
-        await transaction.finish()
+        _ = await redeemAndFinish(transaction, jws: update.jwsRepresentation)
       } catch {
         // Leave unfinished if verification fails; StoreKit will retry.
       }
     }
   }
 
-  /// Intended credit USD for a product id, if known.
   func creditUSD(for productId: String) -> Int? {
     StoreProducts.packs.first { $0.productId == productId }?.creditUSD
   }

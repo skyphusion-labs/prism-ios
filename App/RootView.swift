@@ -13,11 +13,7 @@ struct RootView: View {
             .toolbar { settingsLink }
         }
       } else if state.needsPlaneEnroll {
-        NavigationStack {
-          EnrollView()
-            .navigationTitle("Prism")
-            .toolbar { settingsLink }
-        }
+        OnboardingView()
       } else if state.backend == .controlPlane {
         // Plane: chat + image + video doors
         TabView {

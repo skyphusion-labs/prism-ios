@@ -499,6 +499,24 @@ public struct UsageSummary: Codable, Sendable, Equatable {
   }
 }
 
+/// `POST /v1/store/redeem` response.
+public struct StoreRedeemResponse: Codable, Sendable, Equatable {
+  public let applied: Bool?
+  public let transaction_id: String?
+  public let product_id: String?
+  public let credit_granted_micro_usd: Int?
+  public let credit_micro_usd: Int?
+  public let spent_micro_usd: Int?
+  public let environment: String?
+  public let verified: String?
+  public let error: APIErrorBody?
+
+  public struct APIErrorBody: Codable, Sendable, Equatable {
+    public let code: String?
+    public let message: String?
+  }
+}
+
 public struct ControlPlaneChatMessage: Codable, Sendable, Equatable {
   public var role: String
   public var content: String

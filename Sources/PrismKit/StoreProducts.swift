@@ -3,9 +3,8 @@ import Foundation
 /// App Store Connect product catalog for Prism credit top-ups.
 ///
 /// Live app id: `6798391677` (bundle `org.skyphusion.prism`).
-/// Server-side redeem of purchases is still deferred on the control-plane contract
-/// (store-receipt path parked). Product IDs and StoreKit Configuration are ready for
-/// client purchase UI + local testing.
+/// Redeem: `POST /v1/store/redeem` on the control plane (plane 0.4.15+) with StoreKit 2
+/// `jwsRepresentation` / signed transaction.
 public enum StoreProducts {
   /// App Store Connect app resource id.
   public static let appStoreConnectAppId = "6798391677"
