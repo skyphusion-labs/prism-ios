@@ -91,7 +91,8 @@ extension PrismError: LocalizedError {
       return "Generation timed out. Retry, or use Seedance Fast / Veo Fast."
     case "upstream_error":
       if message.contains("7003") || message.localizedCaseInsensitiveContains("user input") {
-        return "Provider rejected the request (7003). Prefer Veo or Seedance Fast for video; check the model footer."
+        // 7003 is CF "User Input Error" across doors (video schema, music required fields, etc.).
+        return "Provider rejected the request (7003). Video: try Veo/Seedance without a reference still. Music: style prompt only (instrumental default) or add lyrics. Retry after plane updates if this persists."
       }
       if message.localizedCaseInsensitiveContains("upload_url")
         || message.localizedCaseInsensitiveContains("zero data retention")
@@ -115,7 +116,7 @@ extension PrismError: LocalizedError {
       return "Out of credit. Open Settings → Top up, or wait for monthly allowance reset."
     }
     if lower.contains("7003") {
-      return "Provider rejected the request (7003). Prefer Veo or Seedance Fast for video."
+      return "Provider rejected the request (7003). Video: clear reference still / use Veo or Seedance. Music: plain style prompt or lyrics."
     }
     if lower.contains("requires an image") || lower.contains("i2v") && lower.contains("image") {
       return "This model needs a reference image. Add a photo or URL, or pick Veo / Seedance for text-only video."
