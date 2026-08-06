@@ -7,7 +7,7 @@ Guidance for agents working in this repository.
 **AGPL iOS client for Prism.** Shared Swift package (`PrismKit`) plus a SwiftUI app shell
 (`App/` + `Prism.xcodeproj`) for login, model pick, and chat against the playground Worker.
 
-**Status:** kit 0.7.0 (TTS speech door, multi-session chat list; plus 0.6.x polish). ASC app
+**Status:** kit 0.7.1 (conversation compact; plus 0.7.0 speech + multi-session). ASC app
 `6798391677`. Aviation-grade `main`.
 
 ## Related
@@ -28,7 +28,10 @@ Guidance for agents working in this repository.
 
 ## Clients
 
-- **`PrismClient`** -- playground Worker. Public mode session cookie after login. `chatStreamEvents` for incremental SSE.
+- **`PrismClient`** -- playground Worker. Public mode session cookie after login. `chatStreamEvents`
+  for incremental SSE. Conversation compact: `compactConversation` / `clearConversationCompact`
+  (`POST|DELETE /api/conversations/:id/compact`, playground v0.175.7). Plane compact is client-side
+  (summary system block + recent raw turns) via `ConversationCompact` helpers.
 - **`ControlPlaneClient`** -- metered plane, `Bearer pcp_…`. Enroll, me/models, chat stream,
   `generateImage` / `generateVideo` / `generateSpeech` (TTS).
 - **`SSEParser`** -- playground `{type:delta}` and OpenAI `choices[].delta.content` frames.

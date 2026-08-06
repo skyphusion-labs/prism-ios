@@ -50,6 +50,8 @@ struct ChatSession: Identifiable, Equatable, Codable {
   var turns: [ChatTurn]
   var conversationId: String?
   var selectedModelId: String?
+  /// Plane client-side compact (playground compact lives on the Worker).
+  var compact: ConversationCompactState?
   var createdAt: Date
   var updatedAt: Date
 
@@ -59,6 +61,7 @@ struct ChatSession: Identifiable, Equatable, Codable {
     turns: [ChatTurn] = [],
     conversationId: String? = nil,
     selectedModelId: String? = nil,
+    compact: ConversationCompactState? = nil,
     createdAt: Date = Date(),
     updatedAt: Date = Date()
   ) {
@@ -67,6 +70,7 @@ struct ChatSession: Identifiable, Equatable, Codable {
     self.turns = turns
     self.conversationId = conversationId
     self.selectedModelId = selectedModelId
+    self.compact = compact
     self.createdAt = createdAt
     self.updatedAt = updatedAt
   }
@@ -177,6 +181,9 @@ final class AppState: ObservableObject {
   @Published var draft: String = ""
   @Published var conversationId: String?
   @Published var useStream: Bool = true
+  /// Active compact state (playground server or plane local).
+  @Published var compactState: ConversationCompactState?
+  @Published var compactBusy: Bool = false
   /// Saved conversations (newest first). Active transcript is `turns`.
   @Published var sessions: [ChatSession] = []
   @Published var currentSessionId: UUID?
@@ -242,6 +249,29 @@ final class AppState: ObservableObject {
     guard backend == .controlPlane, !isBusy, canChat else { return false }
     guard let last = turns.last, last.role == .assistant else { return false }
     return turns.dropLast().last?.role == .user
+  }
+
+  /// Completed user/assistant pairs eligible for compact (same bar as web: need 3+).
+  var completedChatPairCount: Int {
+    completedChatPairs().count
+  }
+
+  var isCompacted: Bool {
+    guard let c = compactState else { return false }
+    return !c.summary.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+  }
+
+  /// Enough history to compact, and not already compacted.
+  var canCompactConversation: Bool {
+    guard canChat, !isBusy, !compactBusy, !isCompacted else { return false }
+    if backend == .playground {
+      guard let cid = conversationId, !cid.isEmpty else { return false }
+    }
+    return completedChatPairCount >= ConversationCompact.minTurnsToCompact
+  }
+
+  var canExpandConversation: Bool {
+    canChat && !isBusy && !compactBusy && isCompacted
   }
 
   private let secrets: any SecretStore
@@ -739,6 +769,7 @@ final class AppState: ObservableObject {
       if let s = sessions.first(where: { $0.id == id }) {
         turns = s.turns
         conversationId = s.conversationId
+        compactState = s.compact
         if let mid = s.selectedModelId { selectedModelId = mid }
       }
     } else {
@@ -759,6 +790,7 @@ final class AppState: ObservableObject {
       currentSessionId = first.id
       turns = first.turns
       conversationId = first.conversationId
+      compactState = first.compact
       return
     }
     let s = ChatSession(selectedModelId: selectedModelId)
@@ -766,6 +798,7 @@ final class AppState: ObservableObject {
     currentSessionId = s.id
     turns = []
     conversationId = nil
+    compactState = nil
     saveSessionsToDisk()
   }
 
@@ -777,7 +810,8 @@ final class AppState: ObservableObject {
           title: ChatSession.makeTitle(from: turns),
           turns: turns,
           conversationId: conversationId,
-          selectedModelId: selectedModelId
+          selectedModelId: selectedModelId,
+          compact: compactState
         )
         sessions.insert(s, at: 0)
         currentSessionId = s.id
@@ -790,6 +824,7 @@ final class AppState: ObservableObject {
       sessions[i].turns = turns
       sessions[i].conversationId = conversationId
       sessions[i].selectedModelId = selectedModelId
+      sessions[i].compact = compactState
       sessions[i].title = ChatSession.makeTitle(from: turns)
       sessions[i].updatedAt = Date()
       // Move to front when activity happens.
@@ -815,6 +850,7 @@ final class AppState: ObservableObject {
     currentSessionId = id
     turns = s.turns
     conversationId = s.conversationId
+    compactState = s.compact
     if let mid = s.selectedModelId {
       selectedModelId = mid
       persistUIPrefs()
@@ -833,18 +869,150 @@ final class AppState: ObservableObject {
         currentSessionId = next.id
         turns = next.turns
         conversationId = next.conversationId
+        compactState = next.compact
       } else {
         let s = ChatSession(selectedModelId: selectedModelId)
         sessions = [s]
         currentSessionId = s.id
         turns = []
         conversationId = nil
+        compactState = nil
       }
       clearChatFailure()
       errorMessage = nil
     }
     saveSessionsToDisk()
     Haptics.light()
+  }
+
+  // MARK: - Conversation compact
+
+  /// Completed user/assistant pairs (skips empty / error / cancelled assistant shells).
+  func completedChatPairs() -> [ConversationCompact.Pair] {
+    var pairs: [ConversationCompact.Pair] = []
+    var i = 0
+    let list = turns
+    while i < list.count {
+      let t = list[i]
+      if t.role == .user {
+        let u = t.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if i + 1 < list.count, list[i + 1].role == .assistant {
+          let a = list[i + 1].text.trimmingCharacters(in: .whitespacesAndNewlines)
+          if !u.isEmpty, !a.isEmpty, !a.hasPrefix("(error)"), !a.hasPrefix("(cancelled)") {
+            pairs.append(
+              ConversationCompact.Pair(user: u, assistant: a, throughTurnIndex: i + 1)
+            )
+          }
+          i += 2
+          continue
+        }
+      }
+      i += 1
+    }
+    return pairs
+  }
+
+  /// Compact older turns: playground Worker API, or plane-local summary via a chat model.
+  func compactConversation() {
+    guard canCompactConversation else { return }
+    Task { await performCompact() }
+  }
+
+  /// Clear compact so the next send uses full history again.
+  func expandConversation() {
+    guard canExpandConversation else { return }
+    Task { await performExpand() }
+  }
+
+  private func performCompact() async {
+    compactBusy = true
+    errorMessage = nil
+    defer { compactBusy = false }
+    do {
+      switch backend {
+      case .playground:
+        guard let cid = conversationId, !cid.isEmpty else {
+          errorMessage = "Send a message first so the playground has a conversation id."
+          return
+        }
+        let model = selectedModelId
+        let res = try await playground.compactConversation(
+          id: cid,
+          keepRecent: ConversationCompact.defaultKeepRecent,
+          model: model
+        )
+        compactState = res.compact
+        let n = res.turns_summarized ?? 0
+        let k = res.turns_kept_raw ?? 0
+        banner = "Compacted \(n) turn\(n == 1 ? "" : "s"); keeping \(k) recent raw"
+      case .controlPlane:
+        try await performPlaneCompact()
+      }
+      persistCurrentSession()
+      Haptics.success()
+    } catch {
+      errorMessage = prismUserFacingError(error)
+      Haptics.error()
+    }
+  }
+
+  private func performPlaneCompact() async throws {
+    let pairs = completedChatPairs()
+    let keep = ConversationCompact.defaultKeepRecent
+    guard pairs.count >= keep + 1 else {
+      throw PrismError.serverError(
+        "Need at least \(keep + 1) completed turns to compact (have \(pairs.count))."
+      )
+    }
+    let split = ConversationCompact.splitPairs(pairs, keepRecent: keep)
+    guard !split.summarize.isEmpty else {
+      throw PrismError.serverError("Nothing to summarize with keep_recent=\(keep).")
+    }
+    guard let modelId = selectedModelId ?? selectedModel?.model else {
+      throw PrismError.serverError("Pick a chat model to run the compact summary.")
+    }
+    let transcript = ConversationCompact.formatPairsForSummary(split.summarize)
+    let messages = [
+      ControlPlaneChatMessage(role: "system", content: ConversationCompact.systemPrompt),
+      ControlPlaneChatMessage(
+        role: "user",
+        content: "Compress the following conversation into a continuity brief.\n\n\(transcript)"
+      ),
+    ]
+    let raw = try await controlPlane.chat(model: modelId, messages: messages)
+    let summary = ConversationCompact.normalizeSummary(raw)
+    guard !summary.isEmpty else {
+      throw PrismError.serverError("Compact model returned empty summary.")
+    }
+    let through = split.summarize.last!.throughTurnIndex
+    compactState = ConversationCompactState(
+      summary: summary,
+      through_turn_index: through,
+      keep_recent: keep,
+      model: modelId,
+      updated_at: ISO8601DateFormatter().string(from: Date())
+    )
+    banner =
+      "Compacted \(split.summarize.count) turn\(split.summarize.count == 1 ? "" : "s"); keeping \(split.keep.count) recent raw"
+    await refreshPlaneBalanceOnly()
+  }
+
+  private func performExpand() async {
+    compactBusy = true
+    errorMessage = nil
+    defer { compactBusy = false }
+    do {
+      if backend == .playground, let cid = conversationId, !cid.isEmpty {
+        _ = try await playground.clearConversationCompact(id: cid)
+      }
+      compactState = nil
+      banner = "Expanded -- next turn uses full history"
+      persistCurrentSession()
+      Haptics.light()
+    } catch {
+      errorMessage = prismUserFacingError(error)
+      Haptics.error()
+    }
   }
 
   func setShowDeveloperSettings(_ on: Bool) {
@@ -878,6 +1046,7 @@ final class AppState: ObservableObject {
       authenticated = false
       sessionUsername = nil
       conversationId = nil
+      compactState = nil
       turns = []
       models = []
       planeBalance = nil
@@ -1076,6 +1245,7 @@ final class AppState: ObservableObject {
     authenticated = false
     sessionUsername = nil
     conversationId = nil
+    compactState = nil
     turns = []
     await refreshModels()
   }
@@ -1144,6 +1314,7 @@ final class AppState: ObservableObject {
     planeClientLabel = nil
     turns = []
     conversationId = nil
+    compactState = nil
     banner = "Control plane · device key cleared"
   }
 
@@ -1296,10 +1467,18 @@ final class AppState: ObservableObject {
   }
 
   private func sendPlane(model: ModelEntry, assistantId: UUID) async throws {
-    // Full transcript → messages. Prior turns may have been produced by other models;
-    // that is intentional (same as play.skyphusion.org).
+    // Transcript → messages. With compact active, inject summary system block and
+    // only turns after through_turn_index (prism v0.175.7 parity). UI transcript unchanged.
     var messages: [ControlPlaneChatMessage] = []
-    for turn in turns where turn.id != assistantId {
+    if let compact = compactState {
+      let block = compact.systemBlock
+      if !block.isEmpty {
+        messages.append(ControlPlaneChatMessage(role: "system", content: block))
+      }
+    }
+    let through = compactState?.through_turn_index
+    for (idx, turn) in turns.enumerated() where turn.id != assistantId {
+      if let through, idx <= through { continue }
       switch turn.role {
       case .user:
         guard !turn.text.isEmpty else { continue }
@@ -1369,6 +1548,7 @@ final class AppState: ObservableObject {
     currentSessionId = s.id
     turns = []
     conversationId = nil
+    compactState = nil
     errorMessage = nil
     clearChatFailure()
     trimSessions()

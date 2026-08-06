@@ -35,6 +35,12 @@ struct ChatView: View {
         .padding(.horizontal)
         .padding(.bottom, 4)
 
+      if state.canCompactConversation || state.canExpandConversation || state.isCompacted {
+        CompactBar()
+          .padding(.horizontal)
+          .padding(.bottom, 6)
+      }
+
       Divider()
 
       ScrollViewReader { proxy in
@@ -233,6 +239,47 @@ struct ChatView: View {
   }
 }
 
+/// Compact / expand controls (playground API or plane client-side).
+private struct CompactBar: View {
+  @EnvironmentObject private var state: AppState
+
+  var body: some View {
+    HStack(spacing: 8) {
+      if state.isCompacted {
+        Label("Compacted", systemImage: "arrow.down.right.and.arrow.up.left")
+          .font(.caption.weight(.semibold))
+          .foregroundStyle(.orange)
+          .accessibilityLabel("Conversation is compacted for model context")
+      } else if state.completedChatPairCount >= ConversationCompact.minTurnsToCompact {
+        Text("\(state.completedChatPairCount) turns · compact shrinks model context")
+          .font(.caption2)
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+      }
+      Spacer(minLength: 4)
+      if state.compactBusy {
+        ProgressView()
+          .controlSize(.small)
+      } else if state.canExpandConversation {
+        Button("Expand") {
+          state.expandConversation()
+        }
+        .font(.caption.weight(.semibold))
+        .accessibilityLabel("Expand conversation history")
+        .accessibilityHint("Next send uses full transcript again")
+      } else if state.canCompactConversation {
+        Button("Compact") {
+          state.compactConversation()
+        }
+        .font(.caption.weight(.semibold))
+        .accessibilityLabel("Compact conversation")
+        .accessibilityHint("Summarize older turns for the model; UI transcript stays full")
+      }
+    }
+    .frame(minHeight: 28)
+  }
+}
+
 /// First-paint guidance when the transcript is empty.
 private struct ChatEmptyState: View {
   @EnvironmentObject private var state: AppState
@@ -291,9 +338,9 @@ private struct ChatEmptyState: View {
 
   private var subtitle: String {
     if state.backend == .controlPlane {
-      return "Messages stay on this device. Switch models anytime; context is kept until New chat."
+      return "Messages stay on this device. Switch models anytime; context is kept until New chat. After a few turns, Compact summarizes older ones for the model."
     }
-    return "Pick a model above and type a message. Streaming is on by default when the model supports it."
+    return "Pick a model above and type a message. After multi-turn chat, Compact summarizes older turns (playground v0.175.7)."
   }
 }
 
