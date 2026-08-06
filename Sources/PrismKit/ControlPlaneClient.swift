@@ -321,18 +321,32 @@ public final class ControlPlaneClient: @unchecked Sendable {
     throw PrismError.serverError("Job \(id) timed out waiting for completion")
   }
 
-  /// `POST /v1/audio/speech` -- metered TTS; returns base64 audio (mp3 by default).
+  /// `POST /v1/audio/speech` -- metered TTS.
+  /// Prefer `async: true` (plane 0.4.32+) for Workflow + poll (same as music/video).
   public func generateSpeech(_ body: SpeechGenerationRequest) async throws -> SpeechGenerationResponse {
     let key = try requireKey()
-    let res: SpeechGenerationResponse = try await http.sendJSON(
+    var headers: [String: String] = [:]
+    if body.async == true {
+      headers["Prefer"] = "respond-async"
+    }
+    let (httpRes, res): (HTTPURLResponse, SpeechGenerationResponse) = try await http.sendJSONWithResponse(
       method: "POST",
       path: "/v1/audio/speech",
       body: body,
+      headers: headers,
       bearer: key,
-      timeout: Self.nonChatTimeout
+      okStatuses: Set([200, 202]),
+      timeout: body.async == true ? 60 : Self.nonChatTimeout,
+      preferBackground: false
     )
     if let err = res.error {
       throw PrismError.serverError(err.message ?? err.code ?? "speech generation error")
+    }
+    if httpRes.statusCode == 202 || (res.id != nil && res.audioData == nil) {
+      guard let id = res.id, !id.isEmpty else {
+        throw PrismError.serverError("Async speech job missing id")
+      }
+      return res
     }
     guard res.audioData != nil else {
       throw PrismError.serverError("Empty speech audio payload")
@@ -340,8 +354,12 @@ public final class ControlPlaneClient: @unchecked Sendable {
     return res
   }
 
-  public func generateSpeech(model: String, input: String) async throws -> SpeechGenerationResponse {
-    try await generateSpeech(SpeechGenerationRequest(model: model, input: input))
+  public func generateSpeech(
+    model: String,
+    input: String,
+    async: Bool = true
+  ) async throws -> SpeechGenerationResponse {
+    try await generateSpeech(SpeechGenerationRequest(model: model, input: input, async: async))
   }
 
   /// `POST /v1/audio/transcriptions` -- metered STT; `audio` is base64 or data: URL.

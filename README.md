@@ -50,8 +50,9 @@ CI runs package tests on Ubuntu. The iOS app is built with Xcode locally (not in
 
 ## Status
 
-- Kit **0.8.7** (build 22): resume async job poll after lock; Prefer: respond-async.
-  Prior **0.8.6**: async jobs + Grok Range playback.
+- Kit **0.8.8** (build 23): force-sync Workflow jobs on every foreground (fixes stuck
+  pending after lock); speech on async Workflow; video/music/speech long doors.
+  Image stays sync. Prior **0.8.7**.
 - App Store Connect: app `6798391677`, three consumable credit IAPs. See `docs/TESTFLIGHT.md`,
   `docs/ASC-CHECKLIST.md`.
 

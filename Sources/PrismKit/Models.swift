@@ -1001,27 +1001,35 @@ public struct AsyncJobResult: Codable, Sendable, Equatable {
   public let audio: String?
   public let model: String?
   public let rehosted: Bool?
+  public let format: String?
 }
 
 // MARK: - Control plane TTS (`POST /v1/audio/speech`)
 
 /// `POST /v1/audio/speech` body. Plane accepts `input` or `text`.
+/// `async: true` (plane 0.4.32+) returns a job id; poll ``AsyncJobResponse``.
 public struct SpeechGenerationRequest: Codable, Sendable, Equatable {
   public var model: String
   public var input: String
+  public var async: Bool?
 
-  public init(model: String, input: String) {
+  public init(model: String, input: String, async: Bool? = nil) {
     self.model = model
     self.input = input
+    self.async = async
   }
 }
 
-/// Plane TTS envelope: base64 audio (typically mp3).
+/// Plane TTS envelope: base64 audio (typically mp3) or async job accept.
 public struct SpeechGenerationResponse: Codable, Sendable, Equatable {
   public let model: String?
   public let audio_base64: String?
   public let format: String?
   public let error: ControlPlaneErrorBody?
+  /// Present on 202 async accept.
+  public let id: String?
+  public let status: String?
+  public let kind: String?
 
   /// Decoded audio bytes when `audio_base64` is present.
   public var audioData: Data? {
