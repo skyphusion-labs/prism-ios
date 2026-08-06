@@ -23,6 +23,11 @@ public final class HTTPClient: @unchecked Sendable {
       config.httpCookieStorage = storage
       config.httpCookieAcceptPolicy = .always
       config.httpShouldSetCookies = true
+      // Fable (and other thinking models) can sit silent tens of seconds between SSE
+      // frames while the model thinks. Default 60s idle kills the stream mid-think →
+      // Empty stream completion. 5 min idle / 15 min resource covers long premium runs.
+      config.timeoutIntervalForRequest = 300
+      config.timeoutIntervalForResource = 900
       self.session = URLSession(configuration: config)
     }
   }
