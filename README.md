@@ -50,8 +50,8 @@ CI runs package tests on Ubuntu. The iOS app is built with Xcode locally (not in
 
 ## Status
 
-- Kit **0.8.6** (build 21): async plane jobs for video/music (lock-safe poll), Grok media
-  Range-ready playback. Prior **0.8.5**: screen-awake + honest copy.
+- Kit **0.8.7** (build 22): resume async job poll after lock; Prefer: respond-async.
+  Prior **0.8.6**: async jobs + Grok Range playback.
 - App Store Connect: app `6798391677`, three consumable credit IAPs. See `docs/TESTFLIGHT.md`,
   `docs/ASC-CHECKLIST.md`.
 
