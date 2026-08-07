@@ -43,11 +43,14 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: org.skyphusion.prism
+        # Binary/product stays Prism; user-visible name is CFBundleDisplayName.
         PRODUCT_NAME: Prism
         DEVELOPMENT_TEAM: "858878N47M"
         CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1,2"
-        INFOPLIST_KEY_CFBundleDisplayName: Prism
+        # Home screen / Settings / TestFlight label. ASC app name is the same
+        # ("Prism for iOS"; plain "Prism" was taken → old "Prism - prism" suffix).
+        INFOPLIST_KEY_CFBundleDisplayName: "Prism for iOS"
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
@@ -64,7 +67,9 @@ targets:
     info:
       path: App/Info.plist
       properties:
-        CFBundleDisplayName: Prism
+        CFBundleDisplayName: "Prism for iOS"
+        # Match display name so Settings / switcher do not fall back to bare PRODUCT_NAME.
+        CFBundleName: "Prism for iOS"
         UILaunchScreen: {}
         UIApplicationSupportsIndirectInputEvents: true
         NSPhotoLibraryAddUsageDescription: "Save generated images to your photo library."

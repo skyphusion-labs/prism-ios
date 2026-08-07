@@ -64,7 +64,8 @@ After changing `project.yml`: `xcodegen generate`.
 | Item | Value |
 | --- | --- |
 | App ID | `6798391677` |
-| ASC name | `Prism - prism` (auto-suffix; plain "Prism" was taken) |
+| ASC name | `Prism for iOS` (plain "Prism" was taken; was briefly `Prism - prism`) |
+| Home screen | `Prism for iOS` (`CFBundleDisplayName`) |
 | SKU | `skyphusion-prism-ios` |
 | Store URL | https://apps.apple.com/us/app/id6798391677 |
 | Content rights | does not use third-party content |

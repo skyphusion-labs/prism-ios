@@ -356,7 +356,7 @@
 				DEVELOPMENT_TEAM = 858878N47M;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = App/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Prism;
+				INFOPLIST_KEY_CFBundleDisplayName = "Prism for iOS";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take a photo to attach for vision chat or image-to-video.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Unlock Prism when biometric lock is enabled.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Record audio to transcribe with speech-to-text models.";
@@ -538,7 +538,7 @@
 				DEVELOPMENT_TEAM = 858878N47M;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = App/Info.plist;
-				INFOPLIST_KEY_CFBundleDisplayName = Prism;
+				INFOPLIST_KEY_CFBundleDisplayName = "Prism for iOS";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Take a photo to attach for vision chat or image-to-video.";
 				INFOPLIST_KEY_NSFaceIDUsageDescription = "Unlock Prism when biometric lock is enabled.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Record audio to transcribe with speech-to-text models.";
