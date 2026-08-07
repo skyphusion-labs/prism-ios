@@ -1,7 +1,7 @@
 # Prism for iOS 1.0.0 release
 
 **App name:** Prism for iOS  
-**Version:** 1.0.0 (build 26)  
+**Version:** 1.0.0 (CFBundleVersion from archive; ASC currently lists build **16** for 1.0.0 as VALID)  
 **Bundle:** `org.skyphusion.prism`  
 **ASC app id:** `6798391677`  
 **Plane:** play-proxy `prism-control-plane` **0.4.36+** (StoreKit Production JWS verify)
