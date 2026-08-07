@@ -39,6 +39,11 @@ public final class LongRunningURLSession: NSObject, URLSessionTaskDelegate, URLS
 
   private override init() {
     super.init()
+    // Body files are unlinked in `didCompleteWithError`, which reads the URL out of `pending`.
+    // A process killed mid-transfer comes back with `pending` empty, so that unlink never runs
+    // and the file -- prompt plus any base64 reference image -- stays in `tmp/`. Nothing else
+    // ever removes it, so the sweep has to happen on the way in. See prism-ios#49 F4.
+    LongRunBodyFiles.purgeStale(in: FileManager.default.temporaryDirectory)
     let config = URLSessionConfiguration.background(withIdentifier: Self.identifier)
     // User-initiated gens: start immediately, do not wait for "optimal" conditions.
     config.isDiscretionary = false
@@ -69,7 +74,7 @@ public final class LongRunningURLSession: NSObject, URLSessionTaskDelegate, URLS
     var bodyFile: URL?
     if let body = req.httpBody, !body.isEmpty {
       let url = FileManager.default.temporaryDirectory
-        .appendingPathComponent("prism-longrun-\(UUID().uuidString).body")
+        .appendingPathComponent(LongRunBodyFiles.newFileName())
       try body.write(to: url, options: .atomic)
       bodyFile = url
       req.httpBody = nil
