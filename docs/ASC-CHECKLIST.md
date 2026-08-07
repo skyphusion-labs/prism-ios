@@ -1,102 +1,91 @@
-# App Store Connect checklist (Prism)
+# App Store Connect checklist (Prism for iOS 1.0)
 
-App id **6798391677**, bundle **org.skyphusion.prism**, SKU **skyphusion-prism-ios**.
+App id **6798391677**, bundle **org.skyphusion.prism**, SKU **skyphusion-prism-ios**,  
+display name **Prism for iOS**, marketing version **1.0.0** (build 26).
 
 Use `asc` for API work; dashboard only for agreement/tax that CLI cannot do.
 
-## Before first public submit
+Full 1.0 release notes: **`docs/RELEASE-1.0.md`**.
+
+## Before first public submit (1.0)
 
 | Item | Status / action |
 | --- | --- |
-| Bundle ID | `org.skyphusion.prism` (personal Team seed `858878N47M`) |
-| App record | Exists as "Prism - prism" |
-| IAP consumables | `org.skyphusion.prism.credit.{5,20,50}` READY_TO_SUBMIT |
-| Privacy nutrition labels | Declare network; no tracking if true; photo library for refs/save |
-| Privacy policy URL | `https://skyphusion.org/privacy.html` (ASC + in-app Settings) |
-| AGPL source / license | In-app Settings → Legal; source `github.com/skyphusion-labs/prism-ios`; full LICENSE bundled |
-| Support URL | Same or status.skyphusion.org |
-| Export compliance | Standard encryption (HTTPS only) unless you add more |
-| Content rights | DOES_NOT_USE_THIRD_PARTY_CONTENT (current ASC attr) |
-| Screenshots | iPhone 6.7" + 6.5" minimum; chat + image + settings |
+| Bundle ID | `org.skyphusion.prism` (Team `858878N47M`) |
+| App record | **Prism for iOS** (id 6798391677) |
+| IAP consumables | `credit.{5,20,50}` READY_TO_SUBMIT; en-US loc + review screenshots COMPLETE |
+| Privacy nutrition labels | Network; no tracking if true; photo/camera/mic/Face ID |
+| Privacy policy URL | `https://skyphusion.org/privacy.html` |
+| AGPL source / license | Settings → Legal; github.com/skyphusion-labs/prism-ios |
+| Support URL | skyphusion.org or status.skyphusion.org |
+| Export compliance | HTTPS only |
+| Content rights | DOES_NOT_USE_THIRD_PARTY_CONTENT |
+| Screenshots | iPhone 6.7" + 6.5" — `docs/ASC-SCREENSHOTS.md` |
 | App icon | AppIcon asset catalog |
-| Age rating | Questionnaire (AI content generation) |
-| Review notes | Enrollment is operator-token; TestFlight uses Configuration.storekit or sandbox IAP |
+| Age rating | AI content generation questionnaire |
+| Plane | **0.4.36+** for Production JWS redeem |
+| Paid Apps Agreement | Business section: agreement + bank + tax |
 
 ## Privacy / Info.plist (in repo)
 
-- `NSPhotoLibraryUsageDescription` -- reference images for i2i / i2v  
-- `NSPhotoLibraryAddUsageDescription` -- save generated images  
-- `NSMicrophoneUsageDescription` -- STT recording (file + live WebSocket)  
-- `NSCameraUsageDescription` -- vision / i2v stills  
-- `NSFaceIDUsageDescription` -- optional biometric app lock  
+- `NSPhotoLibraryUsageDescription` — reference images for i2i / i2v  
+- `NSPhotoLibraryAddUsageDescription` — save generated images  
+- `NSMicrophoneUsageDescription` — STT recording  
+- `NSCameraUsageDescription` — vision / i2v stills  
+- `NSFaceIDUsageDescription` — optional biometric app lock  
+- `CFBundleDisplayName` / `CFBundleName` — **Prism for iOS**
 
 ## Screenshots
 
-Shot list and capture notes: **`docs/ASC-SCREENSHOTS.md`**.
+Shot list: **`docs/ASC-SCREENSHOTS.md`**.  
+IAP review image: **`docs/iap-review-screenshot.png`** (already uploaded to all three products).
 
 ## API keys (local only)
 
 ```bash
 asc auth status
 asc apps list
+export ASC_APP_ID=6798391677
+asc iap list --app "$ASC_APP_ID"
 ```
-
-StoreKit Server API key (optional, for stricter plane verification later):  
-`ASC_STOREKIT_*` env vars documented in `docs/ASC.md`.
-
-## CLI pointers
-
-- Full command map: `docs/ASC.md`  
-- Auth setup: `docs/apple-cli.md`  
-- Device beta: `docs/TESTFLIGHT.md`  
 
 ## Product gates (pre-public)
 
 | Gate | Check |
 | --- | --- |
-| Plane redeem | `POST /v1/store/redeem` (0.4.15+); sandbox IAP → balance rises |
-| Plane vision | v0.4.23+ multiparty image_url on chat |
-| Plane Fable stream | v0.4.22+ deferred SSE first-byte |
-| TestFlight smoke | Full `docs/TESTFLIGHT.md` on device build 0.8.2+ |
-| Privacy labels | Photos + mic; no tracking; chat not sold |
-| Review notes | Operator enrollment token; control plane privacy (no server chat) |
-| Do not ship | Public top-up marketing until sandbox redeem verified on device |
+| Plane redeem | 0.4.36+ Production JWS; sandbox TestFlight buy → balance |
+| Local StoreKit | Configuration.storekit → Top up → Xcode env redeem |
+| TestFlight smoke | `docs/TESTFLIGHT.md` on device 1.0.0 |
+| Privacy labels | Photos + mic + camera + Face ID; no tracking |
+| Review notes | Operator enrollment; control plane never stores chat |
 
-## Pre-submit ASC pass (operator) — 0.8.4
+## Pre-submit ASC pass (1.0.0)
 
-1. `asc apps list` / app 6798391677 still current  
-2. IAP three credit packs READY_TO_SUBMIT or approved  
-3. **Screenshots (iPhone 6.7" + 6.5"):** follow `docs/ASC-SCREENSHOTS.md` (chat + cost, vision,
-   image, video, Usage, Face ID lock, top-up)  
+1. `asc apps list` / app 6798391677 name **Prism for iOS**  
+2. IAP three packs: localizations + screenshots COMPLETE  
+3. Screenshots (iPhone 6.7" + 6.5") per `ASC-SCREENSHOTS.md`  
 4. Privacy policy + support URLs live  
-5. Age rating questionnaire matches AI generation  
+5. Age rating questionnaire  
 6. Export compliance: HTTPS only  
-7. Privacy nutrition: photos, camera, mic, Face ID; no tracking  
-8. **Review notes (paste in ASC):**  
-   > Prism is a metered multimodal AI client. Enrollment uses a single-use operator token (or
-   > recovery pcp_ key) stored in Keychain. Optional Face ID/Touch ID lock gates the UI after
-   > background. Control plane never stores chat text. Per-request cost from plane headers when
-   > non-stream. Live STT uses GET /v1/stt/stream with Bearer on upgrade. IAP packs apply prepaid
-   > credit via POST /v1/store/redeem. Demo: enroll, enable biometric lock, chat once (see cost
-   > line), More → Usage, optional live mic. Contact: conrad@skyphusion.org  
-9. Build uploaded via TestFlight; internal group installed once  
-10. Home Screen widget (balance) + App Shortcuts (Chat / Usage / New chat) optional review mention  
-
-## Review notes template (0.8.4)
+7. Privacy nutrition labels  
+8. **Review notes:**
 
 ```
-Account: TestFlight internal (or sandbox Apple ID for IAP)
-Enrollment: operator provides single-use token OR recovery pcp_ key
-Steps:
-1. Launch → enroll with token
-2. Chat → short prompt (optional: attach photo with vision model)
-3. More → Usage & spend detail
-4. Image tab → simple prompt → generate
-5. Settings → Top up (sandbox) optional
-Privacy: chats local only on control plane; no third-party analytics
+Prism for iOS is a metered multimodal AI client. Enrollment uses a single-use
+operator token (or recovery pcp_ key) stored in Keychain. Optional Face ID lock
+gates the UI after background. Control plane never stores chat text.
+
+IAP: consumable credit packs (5 / 20 / 50 USD) redeem via POST /v1/store/redeem
+(StoreKit 2 signed transaction). Demo: enroll, Settings → Top up (sandbox),
+chat once, More → Usage. Contact: conrad@skyphusion.org
 ```
 
-## Product gates
+9. Build **1.0.0 (26)** uploaded TestFlight; internal install once  
+10. Attach IAPs to version 1.0.0 submission  
 
-- Plane redeem: `POST /v1/store/redeem` (0.4.15+)  
-- Do not ship public top-up marketing until sandbox redeem is verified on device  
+## Related
+
+- `docs/RELEASE-1.0.md` — release matrix  
+- `docs/TESTFLIGHT.md` — device smoke  
+- `docs/apple-cli.md` — identifiers  
+- plane CONTRACT — store redeem  

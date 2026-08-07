@@ -1,11 +1,11 @@
-# TestFlight smoke (Prism iOS)
+# TestFlight smoke (Prism for iOS)
 
 Internal / external beta checklist for real-device validation. Use **asc** CLI
 where possible; App Store Connect API key is already registered (`asc auth status`).
 
-App: **Prism** (`org.skyphusion.prism`, ASC id `6798391677`).  
+App: **Prism for iOS** (`org.skyphusion.prism`, ASC id `6798391677`).  
 Signing Team ID: `858878N47M` (personal Apple Developer Program membership -- not a
-separate "skyphusion" org team). Kit **0.8.4+**.
+separate "skyphusion" org team). Version **1.0.0+** (see `docs/RELEASE-1.0.md`).
 
 ASC CLI credential name `skyphusion` is only the local key label; App Store Connect
 and code signing both hang off the personal account that owns that Team ID.
@@ -125,7 +125,10 @@ asc beta-groups list --app 6798391677
    - Short prompt → generate; play or open URL.
 7. **More / Settings → Top-up** (sandbox Apple ID or Configuration.storekit Debug)  
    - Purchase credit pack → balance rises after `POST /v1/store/redeem`.  
-   - Plane **v0.4.15+** required.
+   - Plane **v0.4.36+** (Production JWS leaf verify). Sandbox must verify unless
+     `STORE_REDEEM_ALLOW_SANDBOX_TRUST=true` on a lab worker.  
+   - Xcode Configuration.storekit → environment Xcode (decode path).  
+   - TestFlight: device Sandbox Apple ID, **no** StoreKit config override.
 7b. **Chat backup / sync (0.8.2+)**  
    - Settings → Export local chats (JSON).  
    - Settings → Import chats (JSON).  
@@ -145,7 +148,7 @@ asc beta-groups list --app 6798391677
 
 ```bash
 curl -sS https://play-proxy.skyphusion.org/health
-# store redeem requires 0.4.15+
+# store redeem Production JWS: plane 0.4.36+
 ```
 
 ## Tab layout (0.8.1+)

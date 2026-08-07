@@ -1,17 +1,19 @@
-# ASC screenshots kit (Prism iOS)
+# ASC screenshots kit (Prism for iOS 1.0)
 
 Minimum for first public submit: **iPhone 6.7"** and **6.5"** (portrait).
 Optional: iPad 13" if you enable iPad multitasking listing.
 
-App ASC id **6798391677**, bundle **org.skyphusion.prism**.
+App ASC id **6798391677**, bundle **org.skyphusion.prism**, name **Prism for iOS**.  
+Version target: **1.0.0** (`docs/RELEASE-1.0.md`).
 
 ## Capture setup
 
-1. Install the TestFlight / device build of the version you will submit (0.8.4+).
+1. Install the TestFlight / device build of **1.0.0** (or the version you will submit).
 2. Enroll with a throwaway operator token that has spendable balance (do not screenshot real personal chats with private content).
 3. Use **Light mode**, English, no notification banners, full charge or hide battery if fussy.
 4. Simulator or device: Simulator is fine for ASC if UI matches production (Control plane + real models).
 5. iOS **Settings → Display & Brightness → Text Size** default.
+6. Home screen label under the icon should read **Prism for iOS** (not bare "Prism").
 
 ## Shot list (required narrative)
 
@@ -63,7 +65,7 @@ App Store Connect → Prism → version → Screenshots:
 
 ## Review notes (paste with screenshots)
 
-See `docs/ASC-CHECKLIST.md` review notes for 0.8.4. Point reviewers at:
+See `docs/ASC-CHECKLIST.md` review notes for **1.0**. Point reviewers at:
 
 1. Enroll with provided token  
 2. Settings → enable Face ID lock, background, re-open  

@@ -55,7 +55,7 @@ After changing `project.yml`: `xcodegen generate`.
 | --- | --- |
 | Bundle ID | `org.skyphusion.prism` |
 | Bundle resource ID | `4Y2B2UF5QB` |
-| Product name | Prism |
+| Product name | Prism (binary); display **Prism for iOS** |
 | SKU (when creating app) | `skyphusion-prism-ios` |
 | IAP capability | enabled on the bundle ID |
 
@@ -65,7 +65,8 @@ After changing `project.yml`: `xcodegen generate`.
 | --- | --- |
 | App ID | `6798391677` |
 | ASC name | `Prism for iOS` (plain "Prism" was taken; was briefly `Prism - prism`) |
-| Home screen | `Prism for iOS` (`CFBundleDisplayName`) |
+| Home screen | `Prism for iOS` (`CFBundleDisplayName` + `CFBundleName`) |
+| Marketing version | `1.0.0` (see `docs/RELEASE-1.0.md`) |
 | SKU | `skyphusion-prism-ios` |
 | Store URL | https://apps.apple.com/us/app/id6798391677 |
 | Content rights | does not use third-party content |
@@ -76,13 +77,11 @@ asc apps list
 asc iap list --app "$ASC_APP_ID"
 ```
 
-Rename in App Store Connect metadata later if you want a cleaner display name.
+### In-app purchases (READY_TO_SUBMIT for 1.0)
 
-### In-app purchases (READY_TO_SUBMIT)
-
-Provisional consumable credit packs (USA base price). StoreKit 2 redeem is live on
-plane **0.4.15+** (`POST /v1/store/redeem` with signed transaction JWS). Client product
-ids are in `StoreProducts` / `Configuration.storekit`.
+Consumable credit packs (USA base). StoreKit 2 redeem: plane **0.4.36+**
+(`POST /v1/store/redeem`). Client ids: `StoreProducts` / `Configuration.storekit`.
+en-US localizations + review screenshots are COMPLETE. See `docs/RELEASE-1.0.md`.
 
 | Product ID | ASC IAP id | USD | State |
 | --- | --- | --- | --- |
@@ -90,8 +89,9 @@ ids are in `StoreProducts` / `Configuration.storekit`.
 | `org.skyphusion.prism.credit.20` | 6798391642 | 20.00 | READY_TO_SUBMIT |
 | `org.skyphusion.prism.credit.50` | 6798392108 | 50.00 | READY_TO_SUBMIT |
 
-Local StoreKit testing: open scheme → Run → Options → StoreKit Configuration →
-`Configuration.storekit`.
+Local StoreKit testing: scheme → Run → Options → StoreKit Configuration →
+`Configuration.storekit` (environment Xcode). TestFlight/Production need real
+Apple-signed JWS (no scheme StoreKit override).
 
 ## Useful commands
 
