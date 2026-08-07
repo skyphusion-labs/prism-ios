@@ -4,7 +4,7 @@ import StoreKit
 
 struct SettingsView: View {
   @EnvironmentObject private var state: AppState
-  @StateObject private var store = StoreManager()
+  @EnvironmentObject private var store: StoreManager
   @State private var draftPlayURL: String = ""
   @State private var draftPlaneURL: String = ""
   @State private var pastedDeviceKey: String = ""
@@ -185,21 +185,12 @@ struct SettingsView: View {
     .onAppear {
       draftPlayURL = state.baseURLString
       draftPlaneURL = state.controlPlaneURLString
-      store.redeemHandler = { jws in
-        try await state.redeemStoreTransaction(jws: jws)
-      }
-      store.onRedeemed = {
-        await state.refreshModels()
-      }
     }
     .task(id: state.backend) {
+      // The redeem handler is attached once, at launch, in `PrismApp`. It used to be attached
+      // here and only here, in two hand-kept copies, which is why a purchase delivered before
+      // this screen had ever appeared reached a nil handler.
       if state.backend == .controlPlane {
-        store.redeemHandler = { jws in
-          try await state.redeemStoreTransaction(jws: jws)
-        }
-        store.onRedeemed = {
-          await state.refreshModels()
-        }
         await store.loadProducts()
       }
     }
@@ -563,5 +554,6 @@ private struct ChatExportActivityView: UIViewControllerRepresentable {
   NavigationStack {
     SettingsView()
       .environmentObject(AppState(secrets: MemorySecretStore()))
+      .environmentObject(StoreManager())
   }
 }
