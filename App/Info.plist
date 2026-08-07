@@ -30,6 +30,8 @@
 	<string>Save generated images to your photo library.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Attach photos as reference images for image-to-image and image-to-video.</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchScreen</key>

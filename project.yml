@@ -70,6 +70,8 @@ targets:
         CFBundleDisplayName: "Prism for iOS"
         # Match display name so Settings / switcher do not fall back to bare PRODUCT_NAME.
         CFBundleName: "Prism for iOS"
+        # HTTPS-only; skip export compliance questionnaire each upload.
+        ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
         UIApplicationSupportsIndirectInputEvents: true
         NSPhotoLibraryAddUsageDescription: "Save generated images to your photo library."
