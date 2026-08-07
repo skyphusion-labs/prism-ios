@@ -15,6 +15,20 @@ cd "$ROOT"
 
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 
+# Xcode IPA packaging runs `/usr/bin/rsync -E` (Apple openrsync extended attrs).
+# If Homebrew GNU rsync (3.x) is first on PATH, the rsync "server" side rejects
+# --extended-attributes → IDEFoundation "Copy failed". Keep system rsync first.
+export PATH="/usr/bin:/bin:/usr/sbin:/sbin${PATH:+:$PATH}"
+if command -v rsync >/dev/null 2>&1; then
+  _rsync_ver="$(rsync --version 2>&1 | head -1 || true)"
+  if echo "$_rsync_ver" | grep -qi 'samba\|version 3\.'; then
+    echo "error: PATH still resolves to GNU rsync ($_rsync_ver)." >&2
+    echo "  brew unlink rsync   # or rename /opt/homebrew/bin/rsync" >&2
+    echo "  then relaunch Xcode / re-run this script" >&2
+    exit 1
+  fi
+fi
+
 ARCHIVE_DIR="${ARCHIVE_DIR:-$ROOT/build/archives}"
 EXPORT_DIR="${EXPORT_DIR:-$ROOT/build/export}"
 SCHEME="Prism"

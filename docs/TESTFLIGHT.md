@@ -10,6 +10,37 @@ separate "skyphusion" org team). Version **1.0.0+** (see `docs/RELEASE-1.0.md`).
 ASC CLI credential name `skyphusion` is only the local key label; App Store Connect
 and code signing both hang off the personal account that owns that Team ID.
 
+## "Copy failed" on Distribute / export IPA
+
+Xcode Organizer error **Copy failed** with logs under  
+`/var/folders/.../T/Prism_*.xcdistributionlogs` is almost always:
+
+```text
+/usr/bin/rsync ... -E ...
+rsync: on remote machine: --extended-attributes: unknown option
+rsync error: ... [server=3.4.4]
+```
+
+**Cause:** Homebrew **GNU rsync 3.x** is on `PATH` ahead of Apple **openrsync**.  
+Xcode still invokes `/usr/bin/rsync`, but the receiving side picks up GNU rsync, which does not understand Apple’s `-E` / `--extended-attributes`.
+
+**Fix (pick one):**
+
+```bash
+# Preferred: stop Homebrew from shadowing system rsync
+brew unlink rsync
+
+# Then fully quit and reopen Xcode (GUI apps cache PATH)
+```
+
+Or export/upload via the repo script (forces system PATH first):
+
+```bash
+./scripts/archive-testflight.sh --export
+```
+
+Do **not** need to change the app project for this; it is an environment conflict.
+
 ## Build & upload
 
 ### Option A -- script (archive)
