@@ -82,6 +82,7 @@ struct MediaGenerateView: View {
           }
           if kind == .video {
             videoRefSection
+            videoDurationPicker
           }
 
           if let preview = kind == .image ? state.imageSpendPreview : state.videoSpendPreview {
@@ -470,13 +471,36 @@ struct MediaGenerateView: View {
     return "Pure text-to-image. Switch to a · i2i / +ref model to condition on a reference."
   }
 
+  private var videoDurationLimits: VideoDurationLimits {
+    VideoDurationCatalog.limits(for: state.selectedVideoModelId ?? "")
+  }
+
+  @ViewBuilder
+  private var videoDurationPicker: some View {
+    let limits = videoDurationLimits
+    Picker("Clip length", selection: $state.videoDurationSeconds) {
+      ForEach(limits.pickerSeconds, id: \.self) { sec in
+        Text("\(sec)s").tag(sec)
+      }
+    }
+    .onChange(of: state.selectedVideoModelId) { newId in
+      let lim = VideoDurationCatalog.limits(for: newId ?? "")
+      state.videoDurationSeconds = lim.clamp(state.videoDurationSeconds)
+    }
+    .accessibilityLabel("Clip length in seconds")
+    Text("\(limits.min)–\(limits.max)s for this model (default \(limits.defaultSeconds)s). Longer clips take longer to generate.")
+      .font(.caption2)
+      .foregroundStyle(.secondary)
+  }
+
   private var videoFooter: String {
     let mid = state.selectedVideoModelId ?? ""
+    let lim = VideoDurationCatalog.limits(for: mid)
     if mid.hasPrefix("minimax/hailuo") {
-      return "Hailuo is image-to-video only: add a photo above. For text-only use Veo or Seedance Fast."
+      return "Hailuo is image-to-video only: add a photo above. Duration \(lim.min)–\(lim.max)s. For text-only use Veo or Seedance Fast."
     }
     if mid.hasPrefix("xai/grok-imagine-video") {
-      return "Grok video on plane 0.4.14+ uses a ZDR upload path (play-proxy media URL). Prefer Veo / Seedance Fast if it still fails."
+      return "Grok video: duration \(lim.min)–\(lim.max)s. ZDR upload path on plane 0.4.14+. Prefer Veo / Seedance Fast if playback fails."
     }
     return "Veo and Seedance Fast are most reliable. Full Seedance may take up to ~3 min. "
       + "Jobs run on the plane; safe to lock while polling. Grok uses signed play-proxy media."

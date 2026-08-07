@@ -50,9 +50,8 @@ CI runs package tests on Ubuntu. The iOS app is built with Xcode locally (not in
 
 ## Status
 
-- Kit **0.8.8** (build 23): force-sync Workflow jobs on every foreground (fixes stuck
-  pending after lock); speech on async Workflow; video/music/speech long doors.
-  Image stays sync. Prior **0.8.7**.
+- Kit **0.8.9** (build 24): video clip duration picker (per-model CF max, e.g. Grok 1–15s);
+  plane 0.4.34+. Prior **0.8.8** force-sync Workflow jobs + async speech.
 - App Store Connect: app `6798391677`, three consumable credit IAPs. See `docs/TESTFLIGHT.md`,
   `docs/ASC-CHECKLIST.md`.
 

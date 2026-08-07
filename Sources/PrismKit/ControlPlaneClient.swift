@@ -281,10 +281,17 @@ public final class ControlPlaneClient: @unchecked Sendable {
     model: String,
     prompt: String,
     image: String? = nil,
-    async: Bool = true
+    async: Bool = true,
+    duration: Int? = nil
   ) async throws -> VideoGenerationResponse {
     try await generateVideo(
-      VideoGenerationRequest(model: model, prompt: prompt, image: image, async: async)
+      VideoGenerationRequest(
+        model: model,
+        prompt: prompt,
+        image: image,
+        async: async,
+        duration: duration
+      )
     )
   }
 

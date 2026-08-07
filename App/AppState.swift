@@ -231,6 +231,8 @@ final class AppState: ObservableObject {
   @Published var lastImageURL: String?
   @Published var lastImageModel: String?
   @Published var videoPrompt: String = ""
+  /// Clip length in seconds (clamped to selected model max on generate).
+  @Published var videoDurationSeconds: Int = 5
   /// Optional i2v still: data URL or https URL.
   @Published var videoImageRef: String = ""
   @Published var lastVideoURL: String?
@@ -547,6 +549,9 @@ final class AppState: ObservableObject {
 
   func selectVideoModel(_ modelId: String) {
     selectedVideoModelId = modelId.isEmpty ? nil : modelId
+    // Snap duration into the new model's legal range.
+    let limits = VideoDurationCatalog.limits(for: modelId)
+    videoDurationSeconds = limits.clamp(videoDurationSeconds)
     persistUIPrefs()
   }
 
@@ -1610,6 +1615,9 @@ final class AppState: ObservableObject {
         })?.model
         ?? videoModels.first?.model
     }
+    if let mid = selectedVideoModelId {
+      videoDurationSeconds = VideoDurationCatalog.limits(for: mid).clamp(videoDurationSeconds)
+    }
     if selectedSpeechModelId == nil || !speechModels.contains(where: { $0.model == selectedSpeechModelId }) {
       selectedSpeechModelId = speechModels.first(where: { $0.model.contains("aura-2-en") })?.model
         ?? speechModels.first(where: { $0.model.contains("melotts") })?.model
@@ -2189,8 +2197,10 @@ final class AppState: ObservableObject {
     }
     mediaBusy = true
     mediaError = nil
+    let duration = VideoDurationCatalog.limits(for: model.model).clamp(videoDurationSeconds)
+    videoDurationSeconds = duration
     mediaStatus =
-      "Generating \(model.model) · often 1-3 min. Safe to lock; job continues on the plane."
+      "Generating \(model.model) · \(duration)s clip · often 1-3 min. Safe to lock; job continues on the plane."
     lastVideoURL = nil
     beginVideoBackgroundWork()
     startMediaTimer()
@@ -2205,7 +2215,8 @@ final class AppState: ObservableObject {
         model: model.model,
         prompt: prompt.isEmpty ? " " : prompt,
         image: imageRef.isEmpty ? nil : imageRef,
-        async: true
+        async: true,
+        duration: duration
       )
       try Task.checkCancellation()
       if let id = res.id, res.video == nil {
@@ -2499,13 +2510,26 @@ final class AppState: ObservableObject {
   // MARK: - Music
 
   private var musicTask: Task<Void, Never>?
+  /// Bumped on every new music poll / generate so a cancelled Task cannot overwrite UI.
+  private var musicWorkGeneration: UInt64 = 0
+
+  private func nextMusicGeneration() -> UInt64 {
+    musicWorkGeneration += 1
+    return musicWorkGeneration
+  }
+
+  private func isCurrentMusicGeneration(_ gen: UInt64) -> Bool {
+    gen == musicWorkGeneration
+  }
 
   func generateMusic() {
     musicTask?.cancel()
-    musicTask = Task { await self.performGenerateMusic() }
+    let gen = nextMusicGeneration()
+    musicTask = Task { await self.performGenerateMusic(generation: gen) }
   }
 
   func cancelMusic() {
+    _ = nextMusicGeneration()
     musicTask?.cancel()
     musicTask = nil
     stopMusicTimer()
@@ -2696,7 +2720,7 @@ final class AppState: ObservableObject {
     return nil
   }
 
-  private func performGenerateMusic() async {
+  private func performGenerateMusic(generation gen: UInt64) async {
     guard canUseMediaDoors else {
       musicError = "Control plane + device key required for music."
       return
@@ -2725,6 +2749,8 @@ final class AppState: ObservableObject {
     beginMusicBackgroundWork()
     startMusicTimer()
     defer {
+      // Only the current generation owns busy/timer; a superseded Task must not clear them.
+      guard isCurrentMusicGeneration(gen) else { return }
       stopMusicTimer()
       musicBusy = false
       endMusicBackgroundWork()
@@ -2739,10 +2765,11 @@ final class AppState: ObservableObject {
         async: true
       )
       try Task.checkCancellation()
+      guard isCurrentMusicGeneration(gen) else { return }
       if let id = res.id, res.audio == nil {
         try? secrets.set(id, for: SecretStoreKeys.pendingMusicJobId)
         try? secrets.set(model.model, for: SecretStoreKeys.pendingMusicJobModel)
-        musicStatus = "Plane job \(id.prefix(12))… · unlock to refresh if locked"
+        musicStatus = "Plane job \(id.prefix(12))… · job runs on plane (lock OK)"
         try await finishMusicJob(id: id, fallbackModel: model.model)
       } else {
         clearPendingMusicJob()
@@ -2759,9 +2786,11 @@ final class AppState: ObservableObject {
         await refreshPlaneBalanceOnly()
       }
     } catch is CancellationError {
-      // Keep pending job id -- onBecomeActive will resume poll after unlock.
+      // Superseded by forceSync / new generate: leave UI alone.
+      guard isCurrentMusicGeneration(gen) else { return }
+      // Keep pending job id -- onBecomeActive force-sync resumes poll.
       if (try? secrets.get(SecretStoreKeys.pendingMusicJobId)) != nil {
-        musicStatus = "Paused (locked). Unlock to check plane job…"
+        musicStatus = "Plane job continues · re-checks when app is active"
         musicError = nil
       } else {
         musicError = PrismError.cancelled.userFacingMessage
@@ -2770,6 +2799,23 @@ final class AppState: ObservableObject {
         notifyMusicFinished(success: false, detail: "Cancelled after \(musicElapsedSeconds)s")
       }
     } catch {
+      guard isCurrentMusicGeneration(gen) else { return }
+      // Once accepted, never drop the id on radio blips / poll timeout.
+      if (try? secrets.get(SecretStoreKeys.pendingMusicJobId)) != nil,
+         prismIsSuspendOrNetworkError(error)
+      {
+        musicStatus = "Plane job continues · re-checks when app is active"
+        musicError = nil
+        return
+      }
+      if (try? secrets.get(SecretStoreKeys.pendingMusicJobId)) != nil,
+         prismIsSuspendOrNetworkError(error) == false
+      {
+        // Terminal-ish client error with pending: still keep id; forceSync is source of truth.
+        musicStatus = "Plane job continues · \(prismUserFacingError(error))"
+        musicError = nil
+        return
+      }
       clearPendingMusicJob()
       musicError = prismUserFacingError(error)
       musicStatus = "Failed after \(musicElapsedSeconds)s"
@@ -2780,6 +2826,10 @@ final class AppState: ObservableObject {
 
   private func finishMusicJob(id: String, fallbackModel: String) async throws {
     let job = try await controlPlane.waitForJob(id: id, pollInterval: 4, timeout: 420)
+    if !job.isTerminal {
+      // Poll window ended while Workflow still running. Keep pending for forceSync.
+      throw PrismError.serverError("Job still running on the plane")
+    }
     if !job.isSuccess {
       clearPendingMusicJob()
       let msg = job.error?.message ?? job.error?.code ?? "Music job failed"
@@ -2790,6 +2840,9 @@ final class AppState: ObservableObject {
 
   private func finishSpeechJob(id: String, fallbackModel: String) async throws {
     let job = try await controlPlane.waitForJob(id: id, pollInterval: 3, timeout: 180)
+    if !job.isTerminal {
+      throw PrismError.serverError("Job still running on the plane")
+    }
     if !job.isSuccess {
       clearPendingSpeechJob()
       let msg = job.error?.message ?? job.error?.code ?? "Speech job failed"

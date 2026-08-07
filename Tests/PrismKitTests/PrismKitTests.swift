@@ -9,7 +9,7 @@ import FoundationNetworking
 final class PrismKitTests: XCTestCase {
   func testHealthString() {
     XCTAssertEqual(PrismKit.health(), "ok:PrismKit")
-    XCTAssertEqual(PrismKit.version, "0.8.8")
+    XCTAssertEqual(PrismKit.version, "0.8.9")
   }
 
   func testPlaneMeterHeadersCostDescription() {
@@ -710,6 +710,17 @@ final class ControlPlaneClientTests: XCTestCase {
     let s = PrismError.redactSecrets("key pcp_abc123def456ghi789 secret")
     XCTAssertFalse(s.contains("pcp_abc"))
     XCTAssertTrue(s.contains("pcp_"))
+  }
+
+
+  func testVideoDurationGrokAndVeo() {
+    let g = VideoDurationCatalog.limits(for: "xai/grok-imagine-video")
+    XCTAssertEqual(g.min, 1)
+    XCTAssertEqual(g.max, 15)
+    XCTAssertEqual(g.clamp(20), 15)
+    let v = VideoDurationCatalog.limits(for: "google/veo-3.1-fast")
+    XCTAssertEqual(v.allowed, [4, 6, 8])
+    XCTAssertEqual(v.clamp(5), 4)
   }
 
 }

@@ -94,6 +94,11 @@ extension PrismError: LocalizedError {
     case "upstream_timeout":
       return "Generation timed out. Retry, or use Seedance Fast / Veo Fast."
     case "upstream_error":
+      if message.contains("5006") || message.localizedCaseInsensitiveContains("type mismatch")
+        || message.localizedCaseInsensitiveContains("bad input")
+      {
+        return "STT provider rejected the audio format. Prefer Whisper Large v3 Turbo; keep clips short. Update play-proxy if classic Whisper still fails."
+      }
       if message.contains("7003") || message.localizedCaseInsensitiveContains("user input") {
         // 7003 is CF "User Input Error" across doors (video schema, music required fields, etc.).
         return "Provider rejected the request (7003). Video: try Veo/Seedance without a reference still. Music: style prompt only (instrumental default) or add lyrics. Retry after plane updates if this persists."
@@ -183,6 +188,46 @@ public func prismUserFacingError(_ error: Error) -> String {
   }
   // Re-enter via a lightweight PrismError so mapping stays in one place.
   return PrismError.serverError(error.localizedDescription).userFacingMessage
+}
+
+/// True for suspend / lock / flaky radio errors that must **not** drop a pending plane job id.
+/// Once `async` Workflow accepted the job, the phone can die; force-sync on next active recovers.
+public func prismIsSuspendOrNetworkError(_ error: Error) -> Bool {
+  if error is CancellationError { return true }
+  if let p = error as? PrismError {
+    switch p {
+    case .cancelled, .transport:
+      return true
+    case .serverError(let s):
+      let lower = s.lowercased()
+      return lower.contains("still running")
+        || lower.contains("timed out waiting")
+        || lower.contains("network")
+        || lower.contains("offline")
+        || lower.contains("internet")
+    default:
+      break
+    }
+  }
+  let ns = error as NSError
+  guard ns.domain == NSURLErrorDomain else { return false }
+  switch ns.code {
+  case NSURLErrorCancelled,
+    NSURLErrorTimedOut,
+    NSURLErrorNetworkConnectionLost,
+    NSURLErrorNotConnectedToInternet,
+    NSURLErrorDataNotAllowed,
+    NSURLErrorInternationalRoamingOff,
+    NSURLErrorCallIsActive,
+    NSURLErrorCannotConnectToHost,
+    NSURLErrorCannotFindHost,
+    NSURLErrorDNSLookupFailed,
+    NSURLErrorSecureConnectionFailed,
+    NSURLErrorCannotLoadFromNetwork:
+    return true
+  default:
+    return false
+  }
 }
 
 // MARK: - Playground models catalog
@@ -952,17 +997,27 @@ public struct ImageGenerationResponse: Codable, Sendable, Equatable {
 
 /// `POST /v1/videos/generations` body. `image` is optional i2v (data: or https:).
 /// Set `async` true (plane 0.4.29+) for 202 job + poll instead of holding the connection.
+/// `duration` is seconds (plane 0.4.34+ clamps per model; Veo also accepts via seconds).
 public struct VideoGenerationRequest: Codable, Sendable, Equatable {
   public var model: String
   public var prompt: String?
   public var image: String?
   public var async: Bool?
+  /// Clip length in seconds (plane clamps to the model max).
+  public var duration: Int?
 
-  public init(model: String, prompt: String? = nil, image: String? = nil, async: Bool? = nil) {
+  public init(
+    model: String,
+    prompt: String? = nil,
+    image: String? = nil,
+    async: Bool? = nil,
+    duration: Int? = nil
+  ) {
     self.model = model
     self.prompt = prompt
     self.image = image
     self.async = async
+    self.duration = duration
   }
 }
 
