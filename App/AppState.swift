@@ -209,6 +209,13 @@ final class AppState: ObservableObject {
 
   @Published var enrollmentToken: String = ""
   @Published var deviceKeyPresent: Bool = false
+  /// A device key the plane minted that could NOT be written to the Keychain.
+  ///
+  /// The enrollment token is single-use and the plane never shows the key again, so dropping it
+  /// on a write failure leaves the user with no key, no way to re-enroll, and nothing to paste
+  /// into the recovery field. Held here for the session and surfaced once so it can be copied.
+  /// Never logged (this app makes no log calls at all) and cleared as soon as a write succeeds.
+  @Published var unsavedDeviceKey: String?
   /// DEBUG smoke only: in-memory pcp_ when Keychain write fails (unsigned sim builds).
   #if DEBUG
   private var smokeClientKey: String?
@@ -1975,10 +1982,24 @@ final class AppState: ObservableObject {
         label: label,
         platform: "ios"
       )
-      try secrets.set(res.key, for: SecretStoreKeys.controlPlaneDeviceKey)
-      deviceKeyPresent = true
       enrollmentToken = ""
       planeClientLabel = res.client_id
+      // The Keychain write gets its own catch. Folding it into the outer one sent a STORAGE
+      // failure down the NETWORK failure path, which sets deviceKeyPresent = false and drops
+      // `res.key` -- a key the plane has already minted, recorded, and spent the token for.
+      do {
+        try secrets.set(res.key, for: SecretStoreKeys.controlPlaneDeviceKey)
+        unsavedDeviceKey = nil
+      } catch {
+        unsavedDeviceKey = res.key
+        errorMessage =
+          "Enrolled, but the device key could not be saved to the Keychain. "
+          + "Copy it now: the plane will not show it again."
+      }
+      // `ControlPlaneClient.enroll` already set its own `clientKey` from the response, so this
+      // session works either way; what the failure costs is the NEXT launch, where
+      // `rebuildClients` reads the Keychain and finds nothing.
+      deviceKeyPresent = true
       Haptics.success()
       await refreshModels()
     } catch {
@@ -2004,6 +2025,30 @@ final class AppState: ObservableObject {
     } catch {
       errorMessage = prismUserFacingError(error)
     }
+  }
+
+  /// Retry the Keychain write for a key held only in memory (see [unsavedDeviceKey]).
+  func retrySavingDeviceKey() async {
+    guard let key = unsavedDeviceKey else { return }
+    do {
+      try secrets.set(key, for: SecretStoreKeys.controlPlaneDeviceKey)
+      unsavedDeviceKey = nil
+      deviceKeyPresent = true
+      errorMessage = nil
+      Haptics.success()
+    } catch {
+      errorMessage = prismUserFacingError(error)
+      Haptics.error()
+    }
+  }
+
+  /// Put the unsaved key on the clipboard so the user can keep the only copy that exists.
+  func copyUnsavedDeviceKeyToClipboard() {
+    #if canImport(UIKit)
+    guard let key = unsavedDeviceKey else { return }
+    UIPasteboard.general.string = key
+    Haptics.light()
+    #endif
   }
 
   func clearDeviceKey() async {

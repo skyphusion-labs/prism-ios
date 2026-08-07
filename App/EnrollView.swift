@@ -49,6 +49,34 @@ struct EnrollView: View {
         )
       }
 
+      if let key = state.unsavedDeviceKey {
+        Section {
+          Text(key)
+            .font(.system(.footnote, design: .monospaced))
+            .textSelection(.enabled)
+          Button {
+            state.copyUnsavedDeviceKeyToClipboard()
+          } label: {
+            Label("Copy device key", systemImage: "doc.on.doc")
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .frame(minHeight: 44)
+          }
+          Button {
+            Task { await state.retrySavingDeviceKey() }
+          } label: {
+            Text("Try saving to the Keychain again")
+              .frame(maxWidth: .infinity, alignment: .leading)
+              .frame(minHeight: 44)
+          }
+        } header: {
+          Text("Save this device key now")
+        } footer: {
+          Text(
+            "Enrollment succeeded but the key could not be written to the Keychain. It works until you close the app; the enrollment token is spent and the plane will not show the key again. Copy it somewhere safe, then paste it back under Settings."
+          )
+        }
+      }
+
       Section {
         Text("Open Settings (gear) to paste an existing device key, change the plane URL, or switch back to the playground.")
           .font(.footnote)

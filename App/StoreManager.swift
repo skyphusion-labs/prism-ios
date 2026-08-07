@@ -83,10 +83,13 @@ final class StoreManager: ObservableObject {
 
   private func redeemAndFinish(_ transaction: Transaction, jws: String) async -> Bool {
     guard let redeemHandler else {
-      // No plane handler: finish so StoreKit does not loop; credit not applied.
-      await transaction.finish()
+      // Do NOT finish. Finishing is irreversible and stops redelivery, and the credit has not
+      // been applied -- the user has paid and this branch would quietly close the only route to
+      // what they bought. An unfinished consumable is redelivered through `Transaction.updates`
+      // and `Transaction.unfinished`, which is the retry this needs; it is the same reasoning
+      // the redeem-FAILURE path below already relies on. See prism-ios#49 F5.
       statusMessage =
-        "Purchase recorded locally (tx \(transaction.id)) but control plane redeem is not attached. Open Settings on Control plane."
+        "Purchase verified (tx \(transaction.id)); credit not applied yet and the transaction is left open for retry. Switch to Control plane to finish redeeming."
       return false
     }
     do {
@@ -136,6 +139,19 @@ final class StoreManager: ObservableObject {
       } catch {
         // Leave unfinished if verification fails; StoreKit will retry.
       }
+    }
+  }
+
+  /// Redeem everything StoreKit is still holding open.
+  ///
+  /// Called once the plane handler is attached (from `PrismApp`), so a transaction delivered
+  /// before the handler existed, or deliberately left unfinished by a failed redeem, is retried
+  /// at launch instead of waiting for the user to open a particular screen.
+  func redeemUnfinished() async {
+    guard redeemHandler != nil else { return }
+    for await result in Transaction.unfinished {
+      guard let transaction = try? checkVerified(result) else { continue }
+      _ = await redeemAndFinish(transaction, jws: result.jwsRepresentation)
     }
   }
 
