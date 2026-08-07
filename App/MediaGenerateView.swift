@@ -181,25 +181,45 @@ struct MediaGenerateView: View {
         if !history.isEmpty {
           Section {
             ForEach(history) { item in
-              Button {
-                state.restoreMediaHistoryItem(item)
-              } label: {
-                VStack(alignment: .leading, spacing: 2) {
-                  Text(item.model)
-                    .font(.caption)
-                    .foregroundStyle(.primary)
-                  Text(item.prompt)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                  Text(item.createdAt.formatted(date: .omitted, time: .shortened))
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+              VStack(alignment: .leading, spacing: 6) {
+                Button {
+                  state.restoreMediaHistoryItem(item)
+                } label: {
+                  VStack(alignment: .leading, spacing: 2) {
+                    Text(item.model)
+                      .font(.caption)
+                      .foregroundStyle(.primary)
+                    Text(item.prompt)
+                      .font(.caption2)
+                      .foregroundStyle(.secondary)
+                      .lineLimit(2)
+                    Text(item.createdAt.formatted(date: .omitted, time: .shortened))
+                      .font(.caption2)
+                      .foregroundStyle(.tertiary)
+                  }
+                  .frame(maxWidth: .infinity, alignment: .leading)
+                  .frame(minHeight: 44)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .frame(minHeight: 44)
+                .accessibilityLabel("Restore \(item.kind.rawValue) from \(item.model)")
+                if item.kind == .image, item.imageDataURL != nil {
+                  HStack(spacing: 12) {
+                    Button {
+                      state.useMediaHistoryInChat(item)
+                    } label: {
+                      Label("Use in chat", systemImage: "bubble.left")
+                        .font(.caption)
+                    }
+                    .accessibilityLabel("Use history image in chat")
+                    Button {
+                      state.animateMediaHistory(item)
+                    } label: {
+                      Label("Animate", systemImage: "film")
+                        .font(.caption)
+                    }
+                    .accessibilityLabel("Animate history image")
+                  }
+                }
               }
-              .accessibilityLabel("Restore \(item.kind.rawValue) from \(item.model)")
             }
           } header: {
             HStack {
@@ -214,7 +234,7 @@ struct MediaGenerateView: View {
           } footer: {
             Text(
               "Newest first. Tap a row to restore model, prompt, and last result. "
-                + "Session-only (not across app relaunch)."
+                + "Use in chat / Animate hand off to Chat or Video. Session-only."
             )
           }
         }
@@ -336,6 +356,24 @@ struct MediaGenerateView: View {
       if let model = state.lastImageModel {
         Text(model).font(.caption2).foregroundStyle(.secondary)
       }
+      Button {
+        state.useLastImageInChat()
+      } label: {
+        Label("Use in chat", systemImage: "bubble.left")
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .frame(minHeight: 44)
+      }
+      .accessibilityLabel("Use last image in chat")
+      .accessibilityHint("Attaches the image to the chat draft and opens Chat")
+      Button {
+        state.animateLastImage()
+      } label: {
+        Label("Animate (video)", systemImage: "film")
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .frame(minHeight: 44)
+      }
+      .accessibilityLabel("Animate last image as video")
+      .accessibilityHint("Sets the image as the video first frame and opens Video")
     } header: {
       Text("Result")
     }

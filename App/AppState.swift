@@ -149,11 +149,44 @@ struct MediaHistoryItem: Identifiable, Equatable {
     self.imageURL = imageURL
     self.videoURL = videoURL
   }
+
+  /// Prefer data: URL, else https, for chat attach / i2v handoff.
+  var imageDataURL: String? {
+    if let b64 = imageBase64, !b64.isEmpty {
+      return b64.hasPrefix("data:") ? b64 : "data:image/png;base64,\(b64)"
+    }
+    if let url = imageURL, !url.isEmpty { return url }
+    return nil
+  }
+}
+
+/// Main tab bar selection (plane shell). Used for Image/Video → Chat handoffs.
+enum AppMainTab: Hashable {
+  case chat
+  case image
+  case video
+  case more
+}
+
+/// Inline text file staged for the next chat send (not RAG -- whole file in this turn).
+struct DraftDocument: Identifiable, Equatable {
+  let id: UUID
+  let name: String
+  let text: String
+
+  init(id: UUID = UUID(), name: String, text: String) {
+    self.id = id
+    self.name = name
+    self.text = text
+  }
 }
 
 @MainActor
 final class AppState: ObservableObject {
   // MARK: - Backend
+
+  /// Selected main tab (plane). Drives TabView + cross-modal navigation.
+  @Published var selectedTab: AppMainTab = .chat
 
   /// Product default is control plane; playground lives under Settings → Developer.
   @Published var backend: BackendKind = .controlPlane
@@ -201,6 +234,8 @@ final class AppState: ObservableObject {
   @Published var draft: String = ""
   /// Pending chat image attachments (data URLs) for the next send.
   @Published var draftImageDataUrls: [String] = []
+  /// Text-file attachments inlined into the next user message (not Vectorize RAG).
+  @Published var draftDocuments: [DraftDocument] = []
   /// Last plane request cost from response headers (`prism-usage-micro-usd`).
   @Published var lastRequestCost: String?
   /// Biometric lock enabled (Face ID / Touch ID when app becomes active).
@@ -633,6 +668,24 @@ final class AppState: ObservableObject {
     Haptics.light()
   }
 
+  /// Attach an existing data: or https: image URL to the chat draft (handoff from Image tab).
+  @discardableResult
+  func attachChatImageDataURL(_ dataURL: String) -> Bool {
+    let trimmed = dataURL.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return false }
+    guard draftImageDataUrls.count < 3 else {
+      errorMessage = "At most 3 images per message."
+      return false
+    }
+    if draftImageDataUrls.contains(trimmed) {
+      Haptics.light()
+      return true
+    }
+    draftImageDataUrls.append(trimmed)
+    Haptics.light()
+    return true
+  }
+
   func removeDraftImage(at index: Int) {
     guard draftImageDataUrls.indices.contains(index) else { return }
     draftImageDataUrls.remove(at: index)
@@ -640,6 +693,168 @@ final class AppState: ObservableObject {
 
   func clearDraftImages() {
     draftImageDataUrls = []
+  }
+
+  // MARK: - Cross-modal handoffs (Image ↔ Chat ↔ Video)
+
+  /// Last generated image → chat draft attachments; jumps to Chat tab.
+  func useLastImageInChat() {
+    guard let url = lastImageAsDataURL() else {
+      errorMessage = "No generated image to send to chat."
+      Haptics.warning()
+      return
+    }
+    guard attachChatImageDataURL(url) else { return }
+    if draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      draft = "Describe this image."
+    }
+    selectedTab = .chat
+    banner = "Image attached to chat draft"
+    Haptics.success()
+  }
+
+  /// Media history row → chat draft (images only).
+  func useMediaHistoryInChat(_ item: MediaHistoryItem) {
+    guard item.kind == .image, let url = item.imageDataURL else {
+      errorMessage = "That history item has no image."
+      Haptics.warning()
+      return
+    }
+    guard attachChatImageDataURL(url) else { return }
+    if draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      draft = "Describe this image."
+    }
+    selectedTab = .chat
+    banner = "Image attached to chat draft"
+    Haptics.success()
+  }
+
+  /// Last generated image → Video i2v first frame; jumps to Video tab.
+  func animateLastImage() {
+    guard lastImageAsDataURL() != nil else {
+      errorMessage = "No generated image to animate."
+      Haptics.warning()
+      return
+    }
+    useLastImageAsReference(forVideo: true)
+    selectedTab = .video
+    banner = "Image set as video first frame"
+    Haptics.success()
+  }
+
+  /// Media history image → Video i2v.
+  func animateMediaHistory(_ item: MediaHistoryItem) {
+    guard item.kind == .image, let url = item.imageDataURL else {
+      errorMessage = "That history item has no image."
+      Haptics.warning()
+      return
+    }
+    videoImageRef = url
+    selectedTab = .video
+    banner = "Image set as video first frame"
+    Haptics.success()
+  }
+
+  /// Chat draft attachment → Video i2v.
+  func animateChatDraftImage(at index: Int) {
+    guard draftImageDataUrls.indices.contains(index) else { return }
+    videoImageRef = draftImageDataUrls[index]
+    selectedTab = .video
+    banner = "Chat image set as video first frame"
+    Haptics.success()
+  }
+
+  /// Chat turn image(s) → Video i2v (uses first URL).
+  func animateChatTurnImages(_ urls: [String]) {
+    guard let first = urls.first, !first.isEmpty else {
+      errorMessage = "No image on that message."
+      Haptics.warning()
+      return
+    }
+    videoImageRef = first
+    selectedTab = .video
+    banner = "Chat image set as video first frame"
+    Haptics.success()
+  }
+
+  private func lastImageAsDataURL() -> String? {
+    if let b64 = lastImageBase64, !b64.isEmpty {
+      return b64.hasPrefix("data:") ? b64 : "data:image/png;base64,\(b64)"
+    }
+    if let url = lastImageURL, !url.isEmpty { return url }
+    return nil
+  }
+
+  // MARK: - Inline document attach (not RAG)
+
+  /// Max characters inlined per text file (protects context; playground uses ~200k).
+  static let draftDocumentMaxChars = 80_000
+  static let draftDocumentMaxCount = 3
+
+  /// Stage a UTF-8 text file for the next chat turn (whole file in prompt, not Vectorize).
+  @discardableResult
+  func attachChatDocument(name: String, data: Data) -> Bool {
+    guard draftDocuments.count < Self.draftDocumentMaxCount else {
+      errorMessage = "At most \(Self.draftDocumentMaxCount) text files per message."
+      Haptics.warning()
+      return false
+    }
+    guard let raw = String(data: data, encoding: .utf8)
+      ?? String(data: data, encoding: .isoLatin1)
+    else {
+      errorMessage = "Could not read \(name) as text. Use UTF-8 / plain text, not binary."
+      Haptics.error()
+      return false
+    }
+    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else {
+      errorMessage = "File is empty."
+      Haptics.warning()
+      return false
+    }
+    // Reject mostly-binary (high control-char ratio excluding tab/newline).
+    let sample = trimmed.prefix(4000)
+    let control = sample.filter { ch in
+      guard let s = ch.unicodeScalars.first else { return false }
+      return s.value < 32 && s.value != 9 && s.value != 10 && s.value != 13
+    }.count
+    if control > sample.count / 10 {
+      errorMessage = "\(name) looks binary. Attach images via the photo menu, or use a text file."
+      Haptics.error()
+      return false
+    }
+    var text = trimmed
+    if text.count > Self.draftDocumentMaxChars {
+      text = String(text.prefix(Self.draftDocumentMaxChars))
+        + "\n\n…[truncated at \(Self.draftDocumentMaxChars) characters]"
+    }
+    let safeName = name.isEmpty ? "document.txt" : name
+    draftDocuments.append(DraftDocument(name: safeName, text: text))
+    Haptics.light()
+    return true
+  }
+
+  func removeDraftDocument(id: UUID) {
+    draftDocuments.removeAll { $0.id == id }
+  }
+
+  func clearDraftDocuments() {
+    draftDocuments = []
+  }
+
+  /// Fold staged documents into the user message (fenced blocks). Clears draft docs.
+  private func consumeDraftDocumentsIntoText(_ userText: String) -> String {
+    guard !draftDocuments.isEmpty else { return userText }
+    let blocks = draftDocuments.map { doc -> String in
+      let fence = "```"
+      return "\(fence)\(doc.name)\n\(doc.text)\n\(fence)"
+    }
+    draftDocuments = []
+    let body = userText.trimmingCharacters(in: .whitespacesAndNewlines)
+    if body.isEmpty {
+      return blocks.joined(separator: "\n\n")
+    }
+    return body + "\n\n" + blocks.joined(separator: "\n\n")
   }
 
   func clearMediaHistory() {
@@ -1828,8 +2043,12 @@ final class AppState: ObservableObject {
     case .newFromDraft:
       let t = draft.trimmingCharacters(in: .whitespacesAndNewlines)
       sendImages = draftImageDataUrls
-      guard !t.isEmpty || !sendImages.isEmpty else { return }
-      text = t.isEmpty ? "(image)" : t
+      let hasDocs = !draftDocuments.isEmpty
+      guard !t.isEmpty || !sendImages.isEmpty || hasDocs else { return }
+      // Inline text files into this turn only (not RAG / Vectorize).
+      let withDocs = consumeDraftDocumentsIntoText(t)
+      text = withDocs.isEmpty ? (sendImages.isEmpty ? "" : "(image)") : withDocs
+      guard !text.isEmpty || !sendImages.isEmpty else { return }
       draft = ""
       draftImageDataUrls = []
       turns.append(ChatTurn(role: .user, text: text, imageDataUrls: sendImages.isEmpty ? nil : sendImages))

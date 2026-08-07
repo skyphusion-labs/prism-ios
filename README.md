@@ -50,8 +50,9 @@ CI runs package tests on Ubuntu. The iOS app is built with Xcode locally (not in
 
 ## Status
 
-- Kit **0.8.9** (build 24): video clip duration picker (per-model CF max, e.g. Grok 1–15s);
-  plane 0.4.34+. Prior **0.8.8** force-sync Workflow jobs + async speech.
+- Kit **0.8.10** (build 25): cross-modal handoffs (Use in chat / Animate from Image +
+  history; chat draft/turn → Video); inline text-file attach (not RAG). Prior **0.8.9**
+  video duration picker (plane 0.4.34+).
 - App Store Connect: app `6798391677`, three consumable credit IAPs. See `docs/TESTFLIGHT.md`,
   `docs/ASC-CHECKLIST.md`.
 

@@ -1,6 +1,7 @@
 import SwiftUI
 import PrismKit
 import PhotosUI
+import UniformTypeIdentifiers
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -14,6 +15,7 @@ struct ChatView: View {
   @StateObject private var chatRecorder = AudioRecorder()
   @StateObject private var liveMic = LivePCMCapture()
   @State private var showCamera = false
+  @State private var showDocumentImporter = false
 
   var body: some View {
     VStack(spacing: 0) {
@@ -108,7 +110,12 @@ struct ChatView: View {
                   && !turn.text.hasPrefix("(cancelled)"),
                 onUseAsDraft: { state.useTurnAsDraft(turn) },
                 onRegenerate: { state.regenerateLastReply() },
-                onSpeak: { state.speakText(turn.text) }
+                onSpeak: { state.speakText(turn.text) },
+                onAnimate: {
+                  if let urls = turn.imageDataUrls, !urls.isEmpty {
+                    state.animateChatTurnImages(urls)
+                  }
+                }
               )
               .id(turn.id)
             }
@@ -159,7 +166,7 @@ struct ChatView: View {
 
       Divider()
 
-      if !state.draftImageDataUrls.isEmpty {
+      if !state.draftImageDataUrls.isEmpty || !state.draftDocuments.isEmpty {
         ScrollView(.horizontal, showsIndicators: false) {
           HStack(spacing: 8) {
             ForEach(Array(state.draftImageDataUrls.enumerated()), id: \.offset) { idx, url in
@@ -167,6 +174,18 @@ struct ChatView: View {
                 draftThumb(url)
                   .frame(width: 56, height: 56)
                   .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                  .contextMenu {
+                    Button {
+                      state.animateChatDraftImage(at: idx)
+                    } label: {
+                      Label("Animate (video)", systemImage: "film")
+                    }
+                    Button(role: .destructive) {
+                      state.removeDraftImage(at: idx)
+                    } label: {
+                      Label("Remove", systemImage: "trash")
+                    }
+                  }
                 Button {
                   state.removeDraftImage(at: idx)
                 } label: {
@@ -178,6 +197,33 @@ struct ChatView: View {
                 .offset(x: 4, y: -4)
                 .accessibilityLabel("Remove attachment \(idx + 1)")
               }
+            }
+            ForEach(state.draftDocuments) { doc in
+              HStack(spacing: 6) {
+                Image(systemName: "doc.text")
+                  .font(.caption)
+                VStack(alignment: .leading, spacing: 0) {
+                  Text(doc.name)
+                    .font(.caption2)
+                    .lineLimit(1)
+                  Text("\(doc.text.count) chars")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                }
+                Button {
+                  state.removeDraftDocument(id: doc.id)
+                } label: {
+                  Image(systemName: "xmark.circle.fill")
+                    .font(.caption)
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, .black.opacity(0.55))
+                }
+                .accessibilityLabel("Remove file \(doc.name)")
+              }
+              .padding(8)
+              .background(Color.secondary.opacity(0.15))
+              .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+              .accessibilityLabel("Document \(doc.name)")
             }
           }
           .padding(.horizontal)
@@ -200,14 +246,27 @@ struct ChatView: View {
           } label: {
             Label("Paste image", systemImage: "doc.on.clipboard")
           }
+          Divider()
+          Button {
+            showDocumentImporter = true
+          } label: {
+            Label("Text file (inline)", systemImage: "doc.badge.plus")
+          }
+          .disabled(state.draftDocuments.count >= AppState.draftDocumentMaxCount)
         } label: {
-          Image(systemName: "photo.on.rectangle")
+          Image(systemName: "paperclip")
             .font(.title3)
             .frame(minWidth: 44, minHeight: 44)
         }
-        .disabled(state.isBusy || state.draftImageDataUrls.count >= 3)
-        .accessibilityLabel("Attach photo")
-        .accessibilityHint("Library, camera, or clipboard. Up to three images for vision models")
+        .disabled(
+          state.isBusy
+            || (state.draftImageDataUrls.count >= 3
+              && state.draftDocuments.count >= AppState.draftDocumentMaxCount)
+        )
+        .accessibilityLabel("Attach")
+        .accessibilityHint(
+          "Photo, camera, clipboard, or text file. Images for vision; text files are inlined this turn only (not RAG)."
+        )
         .onChange(of: photoItem) { newItem in
           guard let newItem else { return }
           Task {
@@ -294,6 +353,7 @@ struct ChatView: View {
           .disabled(
             state.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
               && state.draftImageDataUrls.isEmpty
+              && state.draftDocuments.isEmpty
           )
           .accessibilityLabel("Send message")
         }
@@ -310,6 +370,43 @@ struct ChatView: View {
         .ignoresSafeArea()
       }
       #endif
+      .fileImporter(
+        isPresented: $showDocumentImporter,
+        allowedContentTypes: [
+          .plainText,
+          .utf8PlainText,
+          .json,
+          .commaSeparatedText,
+          .sourceCode,
+          .html,
+          .xml,
+          UTType(filenameExtension: "md") ?? .plainText,
+          UTType(filenameExtension: "swift") ?? .sourceCode,
+          UTType(filenameExtension: "ts") ?? .sourceCode,
+          UTType(filenameExtension: "py") ?? .sourceCode,
+          UTType(filenameExtension: "log") ?? .plainText,
+        ],
+        allowsMultipleSelection: false
+      ) { result in
+        switch result {
+        case .success(let urls):
+          guard let url = urls.first else { return }
+          let accessed = url.startAccessingSecurityScopedResource()
+          defer {
+            if accessed { url.stopAccessingSecurityScopedResource() }
+          }
+          do {
+            let data = try Data(contentsOf: url)
+            _ = state.attachChatDocument(name: url.lastPathComponent, data: data)
+          } catch {
+            state.errorMessage = "Could not read file: \(error.localizedDescription)"
+            Haptics.error()
+          }
+        case .failure(let err):
+          state.errorMessage = err.localizedDescription
+          Haptics.error()
+        }
+      }
     }
     .toolbar {
       ToolbarItem(placement: .topBarLeading) {
@@ -493,9 +590,9 @@ private struct ChatEmptyState: View {
 
   private var subtitle: String {
     if state.backend == .controlPlane {
-      return "Messages stay on this device (plane privacy). Attach photos for vision models. Compact summarizes older turns."
+      return "Messages stay on this device (plane privacy). Attach photos for vision, text files inline (not RAG). Image tab → Use in chat / Animate. Compact summarizes older turns."
     }
-    return "Pick a model and type a message. Attach photos for vision. Sync cloud history from the chat list when signed in."
+    return "Pick a model and type a message. Attach photos or text files. Sync cloud history from the chat list when signed in."
   }
 }
 
@@ -626,6 +723,11 @@ private struct TurnBubble: View {
   var onUseAsDraft: (() -> Void)?
   var onRegenerate: (() -> Void)?
   var onSpeak: (() -> Void)?
+  var onAnimate: (() -> Void)?
+
+  private var hasImages: Bool {
+    !(turn.imageDataUrls ?? []).isEmpty
+  }
 
   var body: some View {
     HStack {
@@ -697,6 +799,13 @@ private struct TurnBubble: View {
             Button("Use as draft") {
               onUseAsDraft?()
               Haptics.light()
+            }
+          }
+          if hasImages {
+            Button {
+              onAnimate?()
+            } label: {
+              Label("Animate (video)", systemImage: "film")
             }
           }
           if canRegenerate {

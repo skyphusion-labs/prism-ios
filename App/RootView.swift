@@ -18,31 +18,36 @@ struct RootView: View {
         OnboardingView()
       } else if state.backend == .controlPlane {
         // Primary doors on the bar; Audio/Music under More (readable tab bar).
-        TabView {
+        // `selectedTab` enables Image/Video → Chat handoffs without a second gesture.
+        TabView(selection: $state.selectedTab) {
           NavigationStack {
             ChatView()
               .navigationTitle("Chat")
               .toolbar { settingsLink }
           }
           .tabItem { Label("Chat", systemImage: "bubble.left.and.bubble.right") }
+          .tag(AppMainTab.chat)
 
           NavigationStack {
             MediaGenerateView(kind: .image)
               .toolbar { settingsLink }
           }
           .tabItem { Label("Image", systemImage: "photo") }
+          .tag(AppMainTab.image)
 
           NavigationStack {
             MediaGenerateView(kind: .video)
               .toolbar { settingsLink }
           }
           .tabItem { Label("Video", systemImage: "film") }
+          .tag(AppMainTab.video)
 
           NavigationStack {
             MoreHubView()
               .toolbar { settingsLink }
           }
           .tabItem { Label("More", systemImage: "ellipsis.circle") }
+          .tag(AppMainTab.more)
         }
       } else {
         NavigationStack {
