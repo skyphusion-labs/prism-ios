@@ -944,16 +944,20 @@ public struct ControlPlaneErrorBody: Codable, Sendable, Equatable {
 // MARK: - Control plane image / video (unit-priced doors)
 
 /// `POST /v1/images/generations` body. `image` is optional ref for i2i / edit.
+/// Set `async` true (plane 0.4.35+) for 202 job + poll; gpt-image-2 is always async on plane.
 public struct ImageGenerationRequest: Codable, Sendable, Equatable {
   public var model: String
   public var prompt: String
   /// Optional https or data: URL for models that accept reference images.
   public var image: String?
+  /// When true (or model auto-async on plane), returns job id; poll ``AsyncJobResponse``.
+  public var async: Bool?
 
-  public init(model: String, prompt: String, image: String? = nil) {
+  public init(model: String, prompt: String, image: String? = nil, async: Bool? = nil) {
     self.model = model
     self.prompt = prompt
     self.image = image
+    self.async = async
   }
 }
 
@@ -961,11 +965,16 @@ public struct ImageGenerationRequest: Codable, Sendable, Equatable {
 ///
 /// Note: older plane builds mis-filed https URLs into `b64_json`. Clients should use
 /// ``firstDisplayURL`` / ``firstBase64`` helpers which tolerate that.
+/// On 202 async accept (plane 0.4.35+), `id`/`status`/`kind` are set and `data` is nil.
 public struct ImageGenerationResponse: Codable, Sendable, Equatable {
   public let created: Int?
   public let model: String?
   public let data: [ImageGenerationData]?
   public let error: ControlPlaneErrorBody?
+  /// Present on 202 async accept (plane 0.4.35+).
+  public let id: String?
+  public let status: String?
+  public let kind: String?
 
   public struct ImageGenerationData: Codable, Sendable, Equatable {
     public let b64_json: String?
@@ -992,6 +1001,12 @@ public struct ImageGenerationResponse: Codable, Sendable, Equatable {
       return raw
     }
     return nil
+  }
+
+  /// True when this is a 202 job accept (no image payload yet).
+  public var isAsyncAccept: Bool {
+    if let id, !id.isEmpty, firstBase64 == nil, firstDisplayURL == nil { return true }
+    return false
   }
 }
 
@@ -1057,6 +1072,31 @@ public struct AsyncJobResult: Codable, Sendable, Equatable {
   public let model: String?
   public let rehosted: Bool?
   public let format: String?
+  /// Async image jobs (plane 0.4.35+): OpenAI-ish `data[].url` / `data[].b64_json`.
+  public let data: [ImageGenerationResponse.ImageGenerationData]?
+  public let created: Int?
+
+  /// First image URL from an image job result.
+  public var firstImageURL: String? {
+    if let u = data?.first?.url, !u.isEmpty { return u }
+    if let raw = data?.first?.b64_json,
+       raw.hasPrefix("http://") || raw.hasPrefix("https://") {
+      return raw
+    }
+    return nil
+  }
+
+  /// First real base64 image from an image job result (not a URL stuffed into b64_json).
+  public var firstImageBase64: String? {
+    guard let raw = data?.first?.b64_json, !raw.isEmpty else { return nil }
+    if raw.hasPrefix("http://") || raw.hasPrefix("https://") { return nil }
+    if raw.hasPrefix("data:image/") {
+      if let r = raw.range(of: "base64,") {
+        return String(raw[r.upperBound...])
+      }
+    }
+    return raw
+  }
 }
 
 // MARK: - Control plane TTS (`POST /v1/audio/speech`)

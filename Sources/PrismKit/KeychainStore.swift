@@ -37,6 +37,8 @@ public enum SecretStoreKeys {
   public static let pendingVideoJobModel = "org.skyphusion.prism.job.video.model"
   public static let pendingSpeechJobId = "org.skyphusion.prism.job.speech.id"
   public static let pendingSpeechJobModel = "org.skyphusion.prism.job.speech.model"
+  public static let pendingImageJobId = "org.skyphusion.prism.job.image.id"
+  public static let pendingImageJobModel = "org.skyphusion.prism.job.image.model"
   /// App Group key for widget balance (UserDefaults suite, not Keychain).
   public static let appGroupId = "group.org.skyphusion.prism"
   public static let widgetBalanceKey = "widget.balance"

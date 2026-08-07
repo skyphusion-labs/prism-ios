@@ -50,7 +50,7 @@ CI runs package tests on Ubuntu. The iOS app is built with Xcode locally (not in
 
 ## Status
 
-- Kit **0.8.10** (build 25): cross-modal handoffs (Use in chat / Animate from Image +
+- Kit **0.8.11** (build 25): cross-modal handoffs (Use in chat / Animate from Image +
   history; chat draft/turn → Video); inline text-file attach (not RAG). Prior **0.8.9**
   video duration picker (plane 0.4.34+).
 - App Store Connect: app `6798391677`, three consumable credit IAPs. See `docs/TESTFLIGHT.md`,

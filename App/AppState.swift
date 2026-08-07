@@ -209,6 +209,10 @@ final class AppState: ObservableObject {
 
   @Published var enrollmentToken: String = ""
   @Published var deviceKeyPresent: Bool = false
+  /// DEBUG smoke only: in-memory pcp_ when Keychain write fails (unsigned sim builds).
+  #if DEBUG
+  private var smokeClientKey: String?
+  #endif
   @Published var planeClientLabel: String?
   @Published var planeBalance: String?
   /// Dual-pool detail lines for Settings.
@@ -1080,6 +1084,28 @@ final class AppState: ObservableObject {
   // MARK: - Lifecycle
 
   func bootstrap() async {
+    #if DEBUG
+    // Simulator / CI smoke: inject pcp_ from Documents/pcp.key or env path (never log value).
+    var smokePaths: [String] = []
+    if let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+      smokePaths.append(docs.appendingPathComponent("pcp.key").path)
+    }
+    if let path = ProcessInfo.processInfo.environment["PRISM_SMOKE_DEVICE_KEY_FILE"], !path.isEmpty {
+      smokePaths.append(path)
+    }
+    for path in smokePaths {
+      guard let raw = try? String(contentsOfFile: path, encoding: .utf8) else { continue }
+      let k = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+      if k.hasPrefix("pcp_"), k.count >= 20 {
+        smokeClientKey = k
+        try? secrets.set(k, for: SecretStoreKeys.controlPlaneDeviceKey)
+        try? secrets.set("controlPlane", for: SecretStoreKeys.backendMode)
+        backend = .controlPlane
+        deviceKeyPresent = true
+        break
+      }
+    }
+    #endif
     #if canImport(UIKit)
     UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
     #endif
@@ -1663,7 +1689,11 @@ final class AppState: ObservableObject {
     let planeURL =
       URL(string: controlPlaneURLString.trimmingCharacters(in: .whitespacesAndNewlines))
       ?? ControlPlaneClient.productionBaseURL
+    #if DEBUG
+    let existingKey = (try? secrets.get(SecretStoreKeys.controlPlaneDeviceKey)) ?? smokeClientKey
+    #else
     let existingKey = try? secrets.get(SecretStoreKeys.controlPlaneDeviceKey)
+    #endif
     controlPlane = ControlPlaneClient(baseURL: planeURL, clientKey: existingKey)
     deviceKeyPresent = existingKey.map { !$0.isEmpty } ?? false
 
@@ -2337,7 +2367,11 @@ final class AppState: ObservableObject {
     }
     mediaBusy = true
     mediaError = nil
-    mediaStatus = "Generating \(model.model)…"
+    // gpt-image-2 (and other auto-async plane models) return 202; status must say job continues.
+    let likelyAsync = model.model == "openai/gpt-image-2"
+    mediaStatus = likelyAsync
+      ? "Generating \(model.model)… · plane job (safe to lock)"
+      : "Generating \(model.model)…"
     lastImageBase64 = nil
     lastImageURL = nil
     startMediaTimer()
@@ -2359,6 +2393,13 @@ final class AppState: ObservableObject {
         image: imageRef.isEmpty ? nil : imageRef
       )
       try Task.checkCancellation()
+      if let id = res.id, res.isAsyncAccept {
+        try? secrets.set(id, for: SecretStoreKeys.pendingImageJobId)
+        try? secrets.set(model.model, for: SecretStoreKeys.pendingImageJobModel)
+        mediaStatus = "Plane job \(id.prefix(12))… · unlock to refresh if locked"
+        try await finishImageJob(id: id, fallbackModel: model.model, prompt: prompt)
+        return
+      }
       lastImageBase64 = res.firstBase64
       lastImageURL = res.firstDisplayURL
       lastImageModel = res.model ?? model.model
@@ -2380,14 +2421,62 @@ final class AppState: ObservableObject {
       Haptics.success()
       await refreshPlaneBalanceOnly()
     } catch is CancellationError {
-      mediaError = PrismError.cancelled.userFacingMessage
-      mediaStatus = nil
-      Haptics.warning()
+      if (try? secrets.get(SecretStoreKeys.pendingImageJobId)) != nil {
+        mediaStatus = "Paused (locked). Unlock to check plane job…"
+        mediaError = nil
+      } else {
+        mediaError = PrismError.cancelled.userFacingMessage
+        mediaStatus = nil
+        Haptics.warning()
+      }
     } catch {
+      clearPendingImageJob()
       mediaError = prismUserFacingError(error)
-      mediaStatus = nil
+      mediaStatus = "Failed after \(mediaElapsedSeconds)s · prompt kept for Retry"
       Haptics.error()
     }
+  }
+
+  private func finishImageJob(id: String, fallbackModel: String, prompt: String = "") async throws {
+    let job = try await controlPlane.waitForJob(id: id, pollInterval: 4, timeout: 420)
+    if !job.isSuccess {
+      clearPendingImageJob()
+      let msg = job.error?.message ?? job.error?.code ?? "Image job failed"
+      throw PrismError.serverError(msg)
+    }
+    _ = prompt
+    try await applyImageJobResult(job, fallbackModel: fallbackModel)
+  }
+
+  private func applyImageJobResult(_ job: AsyncJobResponse, fallbackModel: String) async throws {
+    let url = job.result?.firstImageURL
+    let b64 = job.result?.firstImageBase64
+    guard url != nil || b64 != nil else {
+      clearPendingImageJob()
+      throw PrismError.serverError("Image job finished with no image")
+    }
+    clearPendingImageJob()
+    lastImageBase64 = b64
+    lastImageURL = url
+    lastImageModel = job.result?.model ?? job.model ?? fallbackModel
+    mediaStatus = "Done · \(lastImageModel ?? fallbackModel) · \(mediaElapsedSeconds)s"
+    mediaError = nil
+    pushMediaHistory(
+      MediaHistoryItem(
+        kind: .image,
+        model: lastImageModel ?? fallbackModel,
+        prompt: imagePrompt,
+        imageBase64: lastImageBase64,
+        imageURL: lastImageURL
+      )
+    )
+    Haptics.success()
+    await refreshPlaneBalanceOnly()
+  }
+
+  private func clearPendingImageJob() {
+    try? secrets.set(nil, for: SecretStoreKeys.pendingImageJobId)
+    try? secrets.set(nil, for: SecretStoreKeys.pendingImageJobModel)
   }
 
   private func performGenerateVideo() async {
@@ -2969,10 +3058,11 @@ final class AppState: ObservableObject {
     startMusicTimer()
     defer {
       // Only the current generation owns busy/timer; a superseded Task must not clear them.
-      guard isCurrentMusicGeneration(gen) else { return }
-      stopMusicTimer()
-      musicBusy = false
-      endMusicBackgroundWork()
+      if isCurrentMusicGeneration(gen) {
+        stopMusicTimer()
+        musicBusy = false
+        endMusicBackgroundWork()
+      }
     }
     let lyrics = musicLyrics.trimmingCharacters(in: .whitespacesAndNewlines)
     do {
@@ -3092,6 +3182,57 @@ final class AppState: ObservableObject {
     }
     if let id = try? secrets.get(SecretStoreKeys.pendingSpeechJobId), !id.isEmpty {
       await syncOnePendingSpeechJob(id: id)
+    }
+    if let id = try? secrets.get(SecretStoreKeys.pendingImageJobId), !id.isEmpty {
+      await syncOnePendingImageJob(id: id)
+    }
+  }
+
+  private func syncOnePendingImageJob(id: String) async {
+    let model = (try? secrets.get(SecretStoreKeys.pendingImageJobModel)) ?? "image"
+    do {
+      let job = try await controlPlane.getJob(id: id)
+      if job.isTerminal {
+        mediaTask?.cancel()
+        mediaBusy = true
+        startMediaTimer()
+        defer {
+          stopMediaTimer()
+          mediaBusy = false
+        }
+        if job.isSuccess {
+          try await applyImageJobResult(job, fallbackModel: model)
+        } else {
+          clearPendingImageJob()
+          mediaError = job.error?.message ?? job.error?.code ?? "Image job failed"
+          mediaStatus = "Failed"
+          Haptics.error()
+        }
+        return
+      }
+      mediaTask?.cancel()
+      mediaBusy = true
+      mediaError = nil
+      mediaStatus = "Plane job \(id.prefix(12))… · still running"
+      startMediaTimer()
+      mediaTask = Task {
+        defer {
+          stopMediaTimer()
+          mediaBusy = false
+        }
+        do {
+          try await finishImageJob(id: id, fallbackModel: model)
+        } catch is CancellationError {
+          mediaStatus = "Paused (background). Will re-check when open…"
+        } catch {
+          clearPendingImageJob()
+          mediaError = prismUserFacingError(error)
+          mediaStatus = "Failed"
+          Haptics.error()
+        }
+      }
+    } catch {
+      mediaStatus = "Plane job \(id.prefix(12))… · re-check pending"
     }
   }
 

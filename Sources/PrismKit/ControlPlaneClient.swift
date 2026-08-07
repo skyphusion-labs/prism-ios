@@ -218,19 +218,33 @@ public final class ControlPlaneClient: @unchecked Sendable {
   /// nonchat hard max 360s. Client budget sits above that for tail/rehost latency.
   public static let musicTimeout: TimeInterval = 420
 
-  /// `POST /v1/images/generations` -- returns `data[].b64_json`.
+  /// `POST /v1/images/generations` -- returns `data[].b64_json`/`url`, or 202 job (gpt-image-2 / async).
   public func generateImage(_ body: ImageGenerationRequest) async throws -> ImageGenerationResponse {
     let key = try requireKey()
-    let res: ImageGenerationResponse = try await http.sendJSON(
+    var headers: [String: String] = [:]
+    if body.async == true {
+      headers["Prefer"] = "respond-async"
+    }
+    let (httpRes, res): (HTTPURLResponse, ImageGenerationResponse) = try await http.sendJSONWithResponse(
       method: "POST",
       path: "/v1/images/generations",
       body: body,
+      headers: headers,
       bearer: key,
-      timeout: Self.nonChatTimeout,
-      preferBackground: true
+      okStatuses: Set([200, 202]),
+      // Async accept is short; sync gens may run ~5 min (plane nonchat 300s).
+      timeout: body.async == true ? 60 : Self.nonChatTimeout,
+      // Prefer foreground for 202 so lock does not stall the accept; long sync still backgrounded.
+      preferBackground: body.async != true
     )
     if let err = res.error {
       throw PrismError.serverError(err.message ?? err.code ?? "image generation error")
+    }
+    if httpRes.statusCode == 202 || res.isAsyncAccept {
+      guard let id = res.id, !id.isEmpty else {
+        throw PrismError.serverError("Async image job missing id")
+      }
+      return res
     }
     guard res.firstBase64 != nil || res.firstDisplayURL != nil else {
       throw PrismError.serverError("Empty image payload")
@@ -238,8 +252,15 @@ public final class ControlPlaneClient: @unchecked Sendable {
     return res
   }
 
-  public func generateImage(model: String, prompt: String, image: String? = nil) async throws -> ImageGenerationResponse {
-    try await generateImage(ImageGenerationRequest(model: model, prompt: prompt, image: image))
+  public func generateImage(
+    model: String,
+    prompt: String,
+    image: String? = nil,
+    async: Bool? = nil
+  ) async throws -> ImageGenerationResponse {
+    try await generateImage(
+      ImageGenerationRequest(model: model, prompt: prompt, image: image, async: async)
+    )
   }
 
   /// `POST /v1/videos/generations` -- `video` is a URL or inline asset.

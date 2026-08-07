@@ -9,7 +9,7 @@ import FoundationNetworking
 final class PrismKitTests: XCTestCase {
   func testHealthString() {
     XCTAssertEqual(PrismKit.health(), "ok:PrismKit")
-    XCTAssertEqual(PrismKit.version, "0.8.10")
+    XCTAssertEqual(PrismKit.version, "0.8.11")
   }
 
   func testPlaneMeterHeadersCostDescription() {
