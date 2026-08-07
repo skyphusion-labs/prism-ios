@@ -15,7 +15,15 @@ settings:
   base:
     SWIFT_VERSION: "5.9"
     MARKETING_VERSION: "1.0.0"
-    CURRENT_PROJECT_VERSION: "28"
+    # LOCAL ARCHIVES ONLY. Xcode Cloud overrides this from CI_BUILD_NUMBER via
+    # ci_scripts/ci_pre_xcodebuild.sh, so this value is what a local
+    # scripts/archive-testflight.sh run ships. App Store Connect rejects any upload
+    # not strictly above every build already uploaded, and that ceiling rises whenever
+    # ANY Xcode Cloud build uploads -- including pull-request builds, which consume
+    # numbers without touching this repo. So this constant chases a counter in another
+    # system and goes stale on its own. Raise it above the last uploaded build before
+    # archiving locally. See fleet-chezmoi#1644.
+    CURRENT_PROJECT_VERSION: "32"
     # Personal Apple Developer Program Team ID (individual membership, not an org)
     DEVELOPMENT_TEAM: "858878N47M"
     CODE_SIGN_STYLE: Automatic
@@ -98,7 +106,7 @@ targets:
         CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1,2"
         MARKETING_VERSION: "1.0.0"
-        CURRENT_PROJECT_VERSION: "28"
+        CURRENT_PROJECT_VERSION: "32"
         GENERATE_INFOPLIST_FILE: NO
         CODE_SIGN_ENTITLEMENTS: Widget/PrismWidget.entitlements
         SKIP_INSTALL: YES
