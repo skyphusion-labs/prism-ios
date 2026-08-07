@@ -41,6 +41,57 @@ Or export/upload via the repo script (forces system PATH first):
 
 Do **not** need to change the app project for this; it is an environment conflict.
 
+## Build number (CFBundleVersion)
+
+One build setting, `CURRENT_PROJECT_VERSION`, feeds both targets:
+
+| Target | How `CFBundleVersion` is produced |
+| --- | --- |
+| `Prism` (app) | `GENERATE_INFOPLIST_FILE: YES`, so Xcode injects `CURRENT_PROJECT_VERSION` over `App/Info.plist` |
+| `PrismWidget` (extension) | `Widget/Info.plist` holds the literal `$(CURRENT_PROJECT_VERSION)` |
+
+Because there is exactly one source value, the extension's build number cannot
+drift from its host app's. App Store Connect rejects an upload where they
+differ, so keep it that way: never set a per-target build number by hand.
+
+`project.yml` is the source of truth and `Prism.xcodeproj` is generated from it
+by XcodeGen. `scripts/archive-testflight.sh` runs `xcodegen generate` before
+every archive, so **an edit to `project.pbxproj` alone is discarded on the next
+local archive.** Change `project.yml` (both sites: `settings.base` and
+`targets.PrismWidget.settings.base`), then regenerate.
+
+### Xcode Cloud
+
+`ci_scripts/ci_pre_xcodebuild.sh` sets `CURRENT_PROJECT_VERSION` to Xcode
+Cloud's own `CI_BUILD_NUMBER` before `xcodebuild` runs, so the uploaded build
+number advances on its own instead of waiting for somebody to remember. The
+script writes both `project.yml` and the committed `project.pbxproj` (Xcode
+Cloud does not run `xcodegen`, so `xcodebuild` reads the committed project),
+verifies that every declaration in both files carries the new value, and fails
+the build if any does not.
+
+Outside Xcode Cloud `CI_BUILD_NUMBER` is unset, and the script then writes
+nothing and exits 0. A local archive therefore uses the committed value as its
+floor. It does not substitute a default, because a default would be a build
+number nobody chose.
+
+### Prerequisite: Next Build Number in App Store Connect
+
+Xcode Cloud build numbers start at `1` and count up per build; they know
+nothing about builds uploaded before Xcode Cloud existed. Build 27 of version
+`1.0.0` is already uploaded, so until Xcode Cloud's counter passes it, a
+derived build number collides with or regresses against what is already there
+and the upload is rejected with *"The bundle version must be higher than the
+previously uploaded version."*
+
+Set the counter once, in App Store Connect: **app page -> Xcode Cloud tab ->
+Settings -> Build Number -> Edit next to Next Build Number**. Requires the
+Admin or App Manager role. Set it above the highest already-uploaded build.
+
+Do not raise `MARKETING_VERSION` to work around a build-number collision; for
+iOS, App Store Connect only requires the version and build-number pair to be
+unique, and `1.0.0` is pinned deliberately (see `docs/RELEASE-1.0.md`).
+
 ## Build & upload
 
 ### Option A -- script (archive)
