@@ -27,6 +27,14 @@ jobs:
         include:
           - language: actions
             build-mode: none
+          # fc#1652: scripts/embed-legal.py was unanalysed. It is small (949 bytes by
+          # the linguist census) and it is still real code that runs in the release
+          # path; python is a no-build extractor, so covering it costs a matrix row.
+          # The swift residual is a SEPARATE and deliberate one, recorded as a declared
+          # exception in fleet-chezmoi system/ci/codeql-language-exceptions.tsv rather
+          # than silently omitted.
+          - language: python
+            build-mode: none
     steps:
       - uses: actions/checkout@v7
       - name: Initialize CodeQL
