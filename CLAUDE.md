@@ -88,5 +88,5 @@ IAP catalog in `Configuration.storekit` + ASC (`credit.{5,20,50}`).
 
 ## Crew + identity
 
-Crew work as their own identity (`sudo -u <member> bash -lc '...'`). Conrad laptop commits:
+Crew work as their own identity (`sudo -n -H -u <member> bash -lc '...'`). Conrad laptop commits:
 `Conrad Rockenhaus <conrad@skyphusion.org>`.
