@@ -161,9 +161,6 @@ struct SettingsView: View {
         Link(destination: LegalLinks.playground) {
           Label("Prism playground (web)", systemImage: "macwindow")
         }
-        Link(destination: LegalLinks.status) {
-          Label("Status", systemImage: "heart.text.square")
-        }
         Link(destination: LegalLinks.supportEmail) {
           Label("support@skyphusion.org", systemImage: "envelope")
         }
