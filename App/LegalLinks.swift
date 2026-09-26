@@ -5,6 +5,7 @@ enum LegalLinks {
   static let privacyPolicy = URL(string: "https://skyphusion.org/privacy.html")!
   static let website = URL(string: "https://skyphusion.org")!
   static let playground = URL(string: "https://play.skyphusion.org")!
+  static let status = URL(string: "https://status.skyphusion.org")!
   // No status link. status.skyphusion.org (Gatus) was removed from the estate 2026-09-25 and
   // is NXDOMAIN; this constant shipped pointing at it from 0.8.1 through 1.0.0 (#62). There is
   // no replacement status surface, so the entry is gone rather than repointed: a link to a
