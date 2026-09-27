@@ -330,23 +330,33 @@ public final class ControlPlaneClient: @unchecked Sendable {
     )
   }
 
-  /// Poll until succeeded/failed or `timeout` elapses. Interval default 4s.
+  /// Poll until the plane reports a terminal status, or `timeout` elapses. Interval default 4s.
+  ///
+  /// Returns a `JobWaitOutcome` rather than a job, because the two endings are not the same fact
+  /// and a caller cannot tell them apart once they are flattened into one value (ios#65). This
+  /// used to return the LAST JOB IT SAW on timeout, which reads at the call site exactly like the
+  /// FINAL job; two callers then treated a still-running paid job as failed and discarded its id.
+  ///
+  /// Timing out is NOT an error and does not throw: the job is very likely still running and still
+  /// billing, so the caller must keep its id. A transport failure mid-poll still throws, and
+  /// `PendingJobPolicy.disposition(afterError:)` classifies that.
   public func waitForJob(
     id: String,
     pollInterval: TimeInterval = 4,
     timeout: TimeInterval = 420
-  ) async throws -> AsyncJobResponse {
+  ) async throws -> JobWaitOutcome {
     let deadline = Date().addingTimeInterval(timeout)
     var last: AsyncJobResponse?
     while Date() < deadline {
       try Task.checkCancellation()
       let job = try await getJob(id: id)
       last = job
-      if job.isTerminal { return job }
+      if job.isTerminal { return .finished(job) }
       try await Task.sleep(nanoseconds: UInt64(pollInterval * 1_000_000_000))
     }
-    if let last { return last }
-    throw PrismError.serverError("Job \(id) timed out waiting for completion")
+    // Deadline reached with the job unfinished. `last` is nil only when the deadline had already
+    // passed before the first poll. Both are the same fact to a caller: no conclusion, keep the id.
+    return .stillRunning(last: last)
   }
 
   /// `POST /v1/audio/speech` -- metered TTS.
