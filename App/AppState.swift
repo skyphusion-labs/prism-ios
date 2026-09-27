@@ -2410,6 +2410,17 @@ final class AppState: ObservableObject {
       mediaError = "Pick an image model."
       return
     }
+    // ios#65: never start a SECOND paid job while one is outstanding. That is the double charge.
+    // The first job is still running on the plane and will be billed whether or not this client is
+    // listening, so the honest move is to go look at it rather than buy another one. This check is
+    // only possible because the id now survives an inconclusive poll (see finishImageJob below).
+    let outstandingImageJob = (try? secrets.get(SecretStoreKeys.pendingImageJobId)) ?? nil
+    if !PendingJobPolicy.maySubmitNewJob(pendingId: outstandingImageJob), let outstanding = outstandingImageJob {
+      mediaError = nil
+      mediaStatus = "An image job is already running on the plane · checking it instead of starting a new one"
+      await syncOnePendingImageJob(id: outstanding)
+      return
+    }
     mediaBusy = true
     mediaError = nil
     // gpt-image-2 (and other auto-async plane models) return 202; status must say job continues.
@@ -2475,6 +2486,15 @@ final class AppState: ObservableObject {
         Haptics.warning()
       }
     } catch {
+      // ios#65: only drop the id when the error is CONCLUSIVE. A timeout, a radio blip or a
+      // suspend leaves paid work running on the plane, and the id is the only way back to it.
+      if (try? secrets.get(SecretStoreKeys.pendingImageJobId)) != nil,
+         PendingJobPolicy.disposition(afterError: error) == .keep
+      {
+        mediaStatus = "Plane job continues · re-checks when app is active"
+        mediaError = nil
+        return
+      }
       clearPendingImageJob()
       mediaError = prismUserFacingError(error)
       mediaStatus = "Failed after \(mediaElapsedSeconds)s · prompt kept for Retry"
@@ -2483,7 +2503,14 @@ final class AppState: ObservableObject {
   }
 
   private func finishImageJob(id: String, fallbackModel: String, prompt: String = "") async throws {
-    let job = try await controlPlane.waitForJob(id: id, pollInterval: 4, timeout: 420)
+    let outcome = try await controlPlane.waitForJob(id: id, pollInterval: 4, timeout: 420)
+    // ios#65: a timeout is NOT a failure. The plane is very likely still running the job and will
+    // bill it, so the id must survive for the next foreground force-sync to resume. Clearing it
+    // here is what orphaned paid work and let Retry buy a second one. Music and speech already
+    // did this; image and video did not.
+    guard case .finished(let job) = outcome else {
+      throw PrismError.serverError("Job still running on the plane")
+    }
     if !job.isSuccess {
       clearPendingImageJob()
       let msg = job.error?.message ?? job.error?.code ?? "Image job failed"
@@ -2548,6 +2575,14 @@ final class AppState: ObservableObject {
       mediaError = "Hailuo is image-to-video only. Add a reference photo, or pick Veo / Seedance Fast."
       return
     }
+    // ios#65, same rule as image: no second paid job while one is outstanding (see finishVideoJob).
+    let outstandingVideoJob = (try? secrets.get(SecretStoreKeys.pendingVideoJobId)) ?? nil
+    if !PendingJobPolicy.maySubmitNewJob(pendingId: outstandingVideoJob), let outstanding = outstandingVideoJob {
+      mediaError = nil
+      mediaStatus = "A video job is already running on the plane · checking it instead of starting a new one"
+      await syncOnePendingVideoJob(id: outstanding)
+      return
+    }
     mediaBusy = true
     mediaError = nil
     let duration = VideoDurationCatalog.limits(for: model.model).clamp(videoDurationSeconds)
@@ -2610,6 +2645,14 @@ final class AppState: ObservableObject {
         Haptics.warning()
       }
     } catch {
+      // ios#65, same rule as image.
+      if (try? secrets.get(SecretStoreKeys.pendingVideoJobId)) != nil,
+         PendingJobPolicy.disposition(afterError: error) == .keep
+      {
+        mediaStatus = "Plane job continues · re-checks when app is active"
+        mediaError = nil
+        return
+      }
       clearPendingVideoJob()
       mediaError = prismUserFacingError(error)
       mediaStatus = "Failed after \(mediaElapsedSeconds)s · prompt kept for Retry"
@@ -2619,7 +2662,11 @@ final class AppState: ObservableObject {
   }
 
   private func finishVideoJob(id: String, fallbackModel: String, prompt: String = "") async throws {
-    let job = try await controlPlane.waitForJob(id: id, pollInterval: 4, timeout: 420)
+    let outcome = try await controlPlane.waitForJob(id: id, pollInterval: 4, timeout: 420)
+    // ios#65, same as image: inconclusive is not failed, and the id is the only handle on paid work.
+    guard case .finished(let job) = outcome else {
+      throw PrismError.serverError("Job still running on the plane")
+    }
     if !job.isSuccess {
       clearPendingVideoJob()
       let msg = job.error?.message ?? job.error?.code ?? "Video job failed"
@@ -3179,8 +3226,9 @@ final class AppState: ObservableObject {
   }
 
   private func finishMusicJob(id: String, fallbackModel: String) async throws {
-    let job = try await controlPlane.waitForJob(id: id, pollInterval: 4, timeout: 420)
-    if !job.isTerminal {
+    let outcome = try await controlPlane.waitForJob(id: id, pollInterval: 4, timeout: 420)
+    // Already correct before ios#65; now the type says it rather than an isTerminal check.
+    guard case .finished(let job) = outcome else {
       // Poll window ended while Workflow still running. Keep pending for forceSync.
       throw PrismError.serverError("Job still running on the plane")
     }
@@ -3193,8 +3241,8 @@ final class AppState: ObservableObject {
   }
 
   private func finishSpeechJob(id: String, fallbackModel: String) async throws {
-    let job = try await controlPlane.waitForJob(id: id, pollInterval: 3, timeout: 180)
-    if !job.isTerminal {
+    let outcome = try await controlPlane.waitForJob(id: id, pollInterval: 3, timeout: 180)
+    guard case .finished(let job) = outcome else {
       throw PrismError.serverError("Job still running on the plane")
     }
     if !job.isSuccess {
