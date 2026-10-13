@@ -17,10 +17,10 @@ Full 1.0 release notes: **`docs/RELEASE-1.0.md`**.
 | Privacy nutrition labels | Network; no tracking if true; photo/camera/mic/Face ID |
 | Privacy policy URL | `https://skyphusion.org/privacy.html` |
 | AGPL source / license | Settings → Legal; github.com/skyphusion-labs/prism-ios |
-| Support URL | skyphusion.org or status.skyphusion.org |
+| Support URL | `https://skyphusion.org` only. Never status.skyphusion.org: removed from the estate 2026-09-25 and NXDOMAIN since (see `App/LegalLinks.swift`); a dead support URL is a review finding |
 | Export compliance | HTTPS only |
 | Content rights | DOES_NOT_USE_THIRD_PARTY_CONTENT |
-| Screenshots | iPhone 6.7" + 6.5" — `docs/ASC-SCREENSHOTS.md` |
+| Screenshots | iPhone 6.7" + 6.5" -- `docs/ASC-SCREENSHOTS.md` |
 | App icon | AppIcon asset catalog |
 | Age rating | AI content generation questionnaire |
 | Plane | **0.4.36+** for Production JWS redeem |
@@ -28,12 +28,12 @@ Full 1.0 release notes: **`docs/RELEASE-1.0.md`**.
 
 ## Privacy / Info.plist (in repo)
 
-- `NSPhotoLibraryUsageDescription` — reference images for i2i / i2v  
-- `NSPhotoLibraryAddUsageDescription` — save generated images  
-- `NSMicrophoneUsageDescription` — STT recording  
-- `NSCameraUsageDescription` — vision / i2v stills  
-- `NSFaceIDUsageDescription` — optional biometric app lock  
-- `CFBundleDisplayName` / `CFBundleName` — **Prism for iOS**
+- `NSPhotoLibraryUsageDescription` -- reference images for i2i / i2v  
+- `NSPhotoLibraryAddUsageDescription` -- save generated images  
+- `NSMicrophoneUsageDescription` -- STT recording  
+- `NSCameraUsageDescription` -- vision / i2v stills  
+- `NSFaceIDUsageDescription` -- optional biometric app lock  
+- `CFBundleDisplayName` / `CFBundleName` -- **Prism for iOS**
 
 ## Screenshots
 
@@ -85,7 +85,7 @@ chat once, More → Usage. Contact: conrad@skyphusion.org
 
 ## Related
 
-- `docs/RELEASE-1.0.md` — release matrix  
-- `docs/TESTFLIGHT.md` — device smoke  
-- `docs/apple-cli.md` — identifiers  
-- plane CONTRACT — store redeem  
+- `docs/RELEASE-1.0.md` -- release matrix  
+- `docs/TESTFLIGHT.md` -- device smoke  
+- `docs/apple-cli.md` -- identifiers  
+- plane CONTRACT -- store redeem  
