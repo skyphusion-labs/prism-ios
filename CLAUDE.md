@@ -8,7 +8,7 @@ Guidance for agents working in this repository.
 (`App/` + `Prism.xcodeproj`) branded **Prism for iOS**.
 
 **Status:** **1.0.0** (build 26+; trust Xcode MARKETING_VERSION / git tag `v1.0.0`). ASC app
-`6798391677`, bundle `org.skyphusion.prism`. Plane: **prism-control-plane 1.0.0** (redeem path since
+`6798391677`, bundle `org.skyphusion.prism`. Plane: **prism-control-plane 1.1.1** (redeem path since
 0.4.36 Production JWS). Sibling Android **1.0.0**. Release notes: `docs/RELEASE-1.0.md`. README has
 estate Mermaid + full catalog tables. Aviation-grade `main`.
 
@@ -16,8 +16,8 @@ estate Mermaid + full catalog tables. Aviation-grade `main`.
 
 | Repo | Role |
 | --- | --- |
-| [prism](https://github.com/skyphusion-labs/prism) | Playground Worker (`play.skyphusion.org`) **1.0.0** |
-| [prism-control-plane](https://github.com/skyphusion-labs/prism-control-plane) | Commercial plane (`play-proxy.skyphusion.org`) **1.0.0** |
+| [prism](https://github.com/skyphusion-labs/prism) | Playground Worker (`play.skyphusion.org`) **1.1.1** |
+| [prism-control-plane](https://github.com/skyphusion-labs/prism-control-plane) | Commercial plane (`play-proxy.skyphusion.org`) **1.1.1** |
 | [prism-android](https://github.com/skyphusion-labs/prism-android) | Sibling Android app **1.0.0** |
 | [prism-mcp](https://github.com/skyphusion-labs/prism-mcp) | MCP door for playground API |
 
@@ -72,7 +72,7 @@ asc apps list
 
 Setup steps: `docs/apple-cli.md`. Command catalog: `docs/ASC.md`. Credentials live in
 macOS keychain (or `chmod 600` env under `~/.config/skyphusion/`); never in the repo.
-StoreKit 2 redeem: plane **1.0.0** / **0.4.36+** (`POST /v1/store/redeem`, Production JWS verify).
+StoreKit 2 redeem: plane since **0.4.36** (`POST /v1/store/redeem`, Production JWS verify).
 IAP catalog in `Configuration.storekit` + ASC (`credit.{5,20,50}`).
 
 ## CI
