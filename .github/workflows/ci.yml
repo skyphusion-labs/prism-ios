@@ -24,7 +24,7 @@ jobs:
     # holds the runner for the 6 h default.
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       # setup-swift v2.4.0 imports Swift's keys and then insists on refreshing them from
       # hkp://keyserver.ubuntu.com, which answered "No keyserver available" (prism-ios#72: the
       # step failed hard, and an earlier run hung 35+ min there). v3 verifies the Swiftly download
