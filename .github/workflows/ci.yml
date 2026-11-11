@@ -15,11 +15,29 @@ concurrency:
 jobs:
   ci:
     name: ci
-    runs-on: ubuntu-latest
+    # Pinned, not ubuntu-latest (prism-ios#72): ubuntu-latest moved to Ubuntu 26.04, which
+    # setup-swift v2.4.0 refuses and which Swiftly 1.1.0 (used by setup-swift v3) rejects as an
+    # unsupported platform. vivijure-ios pins 24.04 for the same reason. Move back to
+    # ubuntu-latest when a setup-swift release supports 26.04.
+    runs-on: ubuntu-24.04
+    # A green run takes about a minute. Without a cap, a hung Install Swift (seen on #73: 35+ min)
+    # holds the runner for the 6 h default.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+      # setup-swift v2.4.0 imports Swift's keys and then insists on refreshing them from
+      # hkp://keyserver.ubuntu.com, which answered "No keyserver available" (prism-ios#72: the
+      # step failed hard, and an earlier run hung 35+ min there). v3 verifies the Swiftly download
+      # against the vendored public keys instead, which is exactly what vivijure-ios does (green
+      # on ubuntu-24.04). .github/swift-signing-keys.asc is that file, byte-identical: 14 public
+      # key blocks including Swift Automatic Signing Key #4 (E813 C892 820A 6FA1 3755 B268 F167
+      # DF1A CF9C E069), and no private material.
+      - name: Import Swift signing keys
+        run: |
+          set -euo pipefail
+          gpg --import .github/swift-signing-keys.asc
       - name: Install Swift
-        uses: swift-actions/setup-swift@v2.4.0
+        uses: swift-actions/setup-swift@364295d9c23900ce04d4e5cc708387921b4e50f9 # v3.0.0-beta.1
         with:
           swift-version: "5.10"
       - run: swift test
