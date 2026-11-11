@@ -1,7 +1,11 @@
 name: coverage
 
-# Free GitHub Actions check named `coverage` (org ruleset context).
-# Does NOT use actions/upload-code-coverage -- that is paid Code Quality.
+# `coverage` context the org ruleset requires. fc#2279: the old estate coverage.yml fell through to
+# an echo and passed without running swift test. This repo has no npm/go manifest, so the estate
+# template does not apply; this job runs the SAME toolchain recipe as ci.yml and then `swift test`,
+# with no fallthrough branch. Every green run prints `coverage-standard: EXECUTED swift test`;
+# classify a run by that line, never by the run: text.
+# Does NOT use actions/upload-code-coverage (paid Code Quality).
 
 on:
   pull_request:
@@ -17,43 +21,27 @@ concurrency:
 
 jobs:
   coverage:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+    runs-on: ubuntu-24.04
+    # Same pin and reason as ci.yml (prism-ios#72): ubuntu-latest is 26.04, which setup-swift
+    # refuses. Cap it: a hung Install Swift otherwise holds the runner for the 6 h default.
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Setup Node
-        if: hashFiles('package.json') != ''
-        uses: actions/setup-node@v7
+      - name: Import Swift signing keys
+        run: |
+          set -euo pipefail
+          gpg --import .github/swift-signing-keys.asc
+
+      - name: Install Swift
+        uses: swift-actions/setup-swift@364295d9c23900ce04d4e5cc708387921b4e50f9 # v3.0.0-beta.1
         with:
-          node-version: "22"
-          cache: npm
+          swift-version: "5.10"
 
-      - name: JS/TS coverage
-        if: hashFiles('package.json') != ''
+      - name: Run tests
         run: |
           set -euo pipefail
-          if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then
-            npm ci
-          else
-            npm install --no-audit --no-fund
-          fi
-          if npm run --silent 2>/dev/null | grep -qE '^  coverage'; then
-            npm run coverage
-          elif npm run --silent 2>/dev/null | grep -qE '^  test'; then
-            npm test
-          else
-            echo "no test/coverage script; coverage check present"
-          fi
-
-      - name: Go coverage
-        if: hashFiles('go.mod') != ''
-        run: |
-          set -euo pipefail
-          go test ./... -cover
-
-      - name: Present
-        if: hashFiles('package.json') == '' && hashFiles('go.mod') == ''
-        run: echo "no supported test manifest; coverage check present"
+          echo "coverage-standard: EXECUTED swift test"
+          swift test
