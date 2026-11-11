@@ -20,6 +20,9 @@ jobs:
     # 'Version "26.04" of Ubuntu is not supported'. vivijure-ios pins 24.04 for the same reason.
     # Move back to ubuntu-latest when a setup-swift release supports 26.04.
     runs-on: ubuntu-24.04
+    # A green run takes about a minute. Without a cap, a hung Install Swift (seen on #73: 35+ min)
+    # holds the runner for the 6 h default.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
       - name: Install Swift
