@@ -50,7 +50,7 @@ final class PendingJobWaitTests: XCTestCase {
     guard case .stillRunning(let last) = outcome else {
       return XCTFail("a timed-out wait reported itself as finished, which is the whole defect")
     }
-    XCTAssertEqual(last?.status, "zzz")
+    XCTAssertEqual(last?.status, "running")
     // And it must not be able to pose as a success anywhere downstream.
     XCTAssertFalse(outcome.isSuccess)
     XCTAssertNil(outcome.finishedJob)
