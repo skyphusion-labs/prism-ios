@@ -278,7 +278,7 @@ Source: [`prism-control-plane/src/catalog.ts`](https://github.com/skyphusion-lab
 | --- | --- |
 | `@cf/deepgram/flux` | Deepgram Flux (live mic) |
 
-**Not on native iOS (playground-only):** RAG multi-doc, projects, Discord import, web search, conversation compact against playground history. Plane never stores prompts; chat history is local on device.
+**Not on native iOS (playground-only):** RAG multi-doc, projects, Discord import, web search, conversation compact against playground history. The plane never stores prompts or chat text; chat history is local on device. Media the plane generates, and reference images you upload, are kept 30 days and then deleted ([prism-control-plane retention](https://github.com/skyphusion-labs/prism-control-plane/blob/main/docs/CONTRACT.md)).
 
 ## Status (1.0.0)
 
